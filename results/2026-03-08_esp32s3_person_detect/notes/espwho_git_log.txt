@@ -1,0 +1,11 @@
+38fb166 Switch object_detect model selection to human_face_detect for responsiveness
+859c028 Use any detection box as immediate person trigger for maximum responsiveness
+f141ea1 Set maximum sensitivity profile for LED trigger (0.65, no area gate, immediate on/off)
+31e5c23 Boost responsiveness for LED trigger (0.72 threshold, immediate assert)
+e708ad0 Increase LED trigger sensitivity (0.78 threshold, 4% area gate)
+beedce8 Retune detection sensitivity to balanced profile (0.82/6%/2-frame assert)
+9cd8646 Fix LED polarity for XIAO onboard LED (active-low)
+cac76a6 Drive XIAO onboard LED on filtered person detection
+01af122 Add threshold and debounce to terminal person detection CSV output
+2307733 Support XIAO ESP32S3 Sense camera pins and CSV terminal output
+1681a1c Merge branch 'feature/add_codespell_check' into 'master'

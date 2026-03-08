@@ -1,0 +1,126 @@
+I (173) esp_image: segment 1: paddr=00094170 vaddr=3fc99e00 sizeESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0x15 (USB_UART_CHIP_RESET),boot:0x8 (SPI_FAST_FLASH_BOOT)
+Saved PC:0x4037e1ca
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x170c
+load:0x403c8700,len:0x4
+load:0x403c8704,len:0xec4
+load:0x403cb700,len:0x318c
+entry 0x403c8950
+I (26) boot: ESP-IDF v5.4.1 2nd stage bootloader
+I (27) boot: compile time Mar  7 2026 17:25:07
+I (27) boot: Multicore bootloader
+I (28) boot: chip revision: v0.2
+I (30) boot: efuse block revision: v1.3
+I (33) qio_mode: Enabling default flash chip QIO
+I (38) boot.esp32s3: Boot SPI Speed : 80MHz
+I (41) boot.esp32s3: SPI Mode       : QIO
+I (45) boot.esp32s3: SPI Flash Size : 8MB
+I (49) boot: Enabling RNG early entropy source...
+I (53) boot: Partition Table:
+I (56) boot: ## Label            Usage          Type ST Offset   Length
+I (62) boot:  0 nvs              WiFi data        01 02 00009000 00006000
+I (69) boot:  1 phy_init         RF data          01 01 0000f000 00001000
+I (75) boot:  2 factory          factory app      00 00 00010000 007d0000
+I (82) boot: End of partition table
+I (85) esp_image: segment 0: paddr=00010020 vaddr=3c130020 size=84148h (541000) map
+I (173) esp_image: segment 1: paddr=00094170 vaddr=3fc99e00 size=05834h ( 22580) load
+I (178) esp_image: segment 2: paddr=000999ac vaddr=40378000 size=0666ch ( 26220) load
+I (184) esp_image: segment 3: paddr=000a0020 vaddr=42000020 size=12e254h (1237588) map
+I (368) esp_image: segment 4: paddr=001ce27c vaddr=4037e66c size=0b768h ( 46952) load
+I (378) esp_image: segment 5: paddr=001d99ec vaddr=600fe100 size=0001ch (    28) load
+I (386) boot: Loaded app from partition at offset 0x10000
+I (386) boot: Disabling RNG early entropy source...
+I (396) octal_psram: vendor id    : 0x0d (AP)
+I (396) octal_psram: dev id       : 0x02 (generation 3)
+I (397) octal_psram: density      : 0x03 (64 Mbit)
+I (399) octal_psram: good-die     : 0x01 (Pass)
+I (403) octal_psram: Latency      : 0x01 (Fixed)
+I (407) octal_psram: VCC          : 0x01 (3V)
+I (411) octal_psram: SRF          : 0x01 (Fast Refresh)
+I (416) octal_psram: BurstType    : 0x01 (Hybrid Wrap)
+I (421) octal_psram: BurstLen     : 0x01 (32 Byte)
+I (426) octal_psram: Readlatency  : 0x02 (10 cycles@Fixed)
+I (431) octal_psram: DriveStrength: 0x00 (1/1)
+I (436) MSPI Timing: PSRAM timing tuning index: 4
+I (439) esp_psram: Found 8MB PSRAM device
+I (443) esp_psram: Speed: 80MHz
+I (480) mmu_psram: Read only data copied and mapped to SPIRAM
+I (562) mmu_psram: Instructions copied and mapped to SPIRAM
+I (563) cpu_start: Multicore app
+I (783) esp_psram: SPI SRAM memory test OK
+I (792) cpu_start: Pro cpu start user code
+I (792) cpu_start: cpu freq: 240000000 Hz
+I (792) app_init: Application information:
+I (793) app_init: Project name:     object_detect
+I (796) app_init: App version:      1681a1c-dirty
+I (801) app_init: Compile time:     Mar  7 2026 17:23:02
+I (806) app_init: ELF file SHA256:  dad7a1285...
+I (810) app_init: ESP-IDF:          v5.4.1
+I (814) efuse_init: Min chip rev:     v0.0
+I (818) efuse_init: Max chip rev:     v0.99 
+I (822) efuse_init: Chip rev:         v0.2
+I (825) heap_init: Initializing. RAM available for dynamic allocation:
+I (832) heap_init: At 3FCA0E08 len 00048908 (290 KiB): RAM
+I (837) heap_init: At 3FCE9710 len 00005724 (21 KiB): RAM
+I (842) esp_psram: Adding pool of 6400K of PSRAM memory to heap allocator
+I (849) spi_flash: detected chip: gd
+I (852) spi_flash: flash io: qio
+I (855) sleep_gpio: Configure to isolate all GPIO pins in sleep state
+I (861) sleep_gpio: Enable automatic switching of GPIO sleep configuration
+I (868) main_task: Started on CPU0
+I (871) esp_psram: Reserving pool of 32K of internal memory for DMA/internal allocations
+I (879) main_task: Calling app_main()
+I (882) gpio: GPIO[3]| InputEn: 0| OutputEn: 1| OpenDrain: 1| Pullup: 0| Pulldown: 0| Intr:0 
+I (891) s3 ll_cam: DMA Channel=0
+I (893) cam_hal: cam init ok
+I (896) sccb-ng: pin_sda 40 pin_scl 39
+I (899) sccb-ng: sccb_i2c_port=1
+I (913) camera: Camera PID=0x3660 VER=0x00 MIDL=0x00 MIDH=0x00
+I (913) camera: Detected OV3660 camera
+I (914) camera: Detected camera at address=0x3c
+I (1221) cam_hal: PSRAM DMA mode enabled
+I (1221) s3 ll_cam: node_size: 3840, nodes_per_line: 1, lines_per_node: 8
+I (1221) s3 ll_cam: dma_half_buffer_min:  3840, dma_half_buffer: 11520, lines_per_half_buffer: 24, dma_buffer_size: 115200
+I (1231) cam_hal: buffer_size: 115200, half_buffer_size: 11520, node_buffer_size: 3840, node_cnt: 30, total_cnt: 11
+I (1241) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1246) cam_hal: Frame[0]: Offset: 16, Addr: 0x3C1C0F60
+I (1251) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1257) cam_hal: Frame[1]: Offset: 16, Addr: 0x3C1DFE90
+I (1262) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1267) cam_hal: Frame[2]: Offset: 16, Addr: 0x3C1FEDC0
+I (1272) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1278) cam_hal: Frame[3]: Offset: 16, Addr: 0x3C21DCF0
+I (1283) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1288) cam_hal: Frame[4]: Offset: 16, Addr: 0x3C23CC20
+I (1294) cam_hal: cam config ok
+I (1308) ov3660: Calculated VCO: 160000000 Hz, PLLCLK: 160000000 Hz, SYSCLK: 40000000 Hz, PCLK: 10000000 Hz
+I (1325) s3 ll_cam: DMA Channel=0
+I (1325) cam_hal: cam init ok
+I (1326) sccb-ng: pin_sda 40 pin_scl 39
+I (1326) sccb-ng: sccb_i2c_port=1
+I (1337) camera: Camera PID=0x3660 VER=0x00 MIDL=0x00 MIDH=0x00
+I (1338) camera: Detected OV3660 camera
+I (1338) camera: Detected camera at address=0x3c
+I (1645) cam_hal: PSRAM DMA mode enabled
+I (1645) s3 ll_cam: node_size: 3840, nodes_per_line: 1, lines_per_node: 8
+I (1645) s3 ll_cam: dma_half_buffer_min:  3840, dma_half_buffer: 11520, lines_per_half_buffer: 24, dma_buffer_size: 115200
+I (1655) cam_hal: buffer_size: 115200, half_buffer_size: 11520, node_buffer_size: 3840, node_cnt: 30, total_cnt: 11
+I (1665) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1670) cam_hal: Frame[0]: Offset: 16, Addr: 0x3C1C0F60
+I (1675) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1681) cam_hal: Frame[1]: Offset: 16, Addr: 0x3C1DFE90
+I (1686) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1691) cam_hal: Frame[2]: Offset: 16, Addr: 0x3C1FEDC0
+I (1696) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1702) cam_hal: Frame[3]: Offset: 16, Addr: 0x3C21DCF0
+I (1707) cam_hal: Allocating 126736 Byte frame buffer in PSRAM
+I (1712) cam_hal: Frame[4]: Offset: 16, Addr: 0x3C23CC20
+I (1718) cam_hal: cam config ok
+I (1732) ov3660: Calculated VCO: 160000000 Hz, PLLCLK: 160000000 Hz, SYSCLK: 40000000 Hz, PCLK: 10000000 Hz
+W (1752) FbsLoader: There is only one model in the flatbuffers, ignore the input model name!
+W (1753) FbsLoader: CONFIG_SPIRAM_RODATA or CONFIG_SPIRAM_XIP_FROM_PSRAM option is on, fbs model is copied to PSRAM.
+W (1836) dl::Model: Minimize() will delete variables not used in model inference, which will make it impossible to test or debug the model.
+I (1839) main_task: Returned from app_main()
