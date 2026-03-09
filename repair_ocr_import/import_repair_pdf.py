@@ -157,6 +157,11 @@ def main():
     ap.add_argument("--print-only", action="store_true")
     ap.add_argument("--review", action="store_true", help="Appendせず、確認質問用にキャプチャ出力")
     ap.add_argument("--capture-dir", default="/home/kage/share/ocr_captures")
+    # 確認後に手動で確定値を上書きするためのオプション
+    ap.add_argument("--symptom", default=None)
+    ap.add_argument("--cause", default=None)
+    ap.add_argument("--action", default=None)
+    ap.add_argument("--equip-no", default=None)
     args = ap.parse_args()
 
     rotation, txt = best_ocr(args.pdf)
@@ -172,6 +177,16 @@ def main():
     print("[CAPTURES]")
     for k, v in captures.items():
         print(f"- {k}: {v}")
+
+    # 手動確定値で上書き
+    if args.symptom:
+        fields["symptom"] = args.symptom
+    if args.cause:
+        fields["cause"] = args.cause
+    if args.action:
+        fields["action"] = args.action
+    if args.equip_no:
+        fields["equip_no"] = args.equip_no
 
     if args.print_only or args.review:
         print("\n[確認依頼テンプレ]")
