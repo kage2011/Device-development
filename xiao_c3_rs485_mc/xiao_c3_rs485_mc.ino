@@ -116,16 +116,154 @@ void setup() {
   Serial1.begin(9600, SERIAL_7O1, PIN_RX, PIN_TX);
 
   Serial.println("xiao_c3_rs485_mc ready");
-  Serial.println("type: read");
+  Serial.println("type: read3e / read1e / readasc / read1c");
+}
+
+bool readOnce1C() {
+  // 1C / no-procedure style: ENQ + "00FF" + body + CR (checksum OFF)
+  const uint8_t ENQ = 0x05;
+  const uint8_t CR  = 0x0D;
+
+  auto clearRx = [&]() {
+    while (Serial1.available()) Serial1.read();
+  };
+
+  auto sendBody = [&](const char *body) {
+    clearRx();
+
+    rs485TxMode();
+    delayMicroseconds(200);
+    Serial1.write(ENQ);
+    Serial1.print("00");  // station
+    Serial1.print("FF");  // pc no
+    Serial1.print(body);   // e.g. WR0D200002
+    Serial1.write(CR);
+    Serial1.flush();
+
+    delayMicroseconds(300);
+    rs485RxMode();
+
+    uint8_t raw[196];
+    size_t n = 0;
+    bool hasSTX = false, hasETX = false, hasACK = false, hasNAK = false, hasCR = false;
+    unsigned long t0 = millis();
+
+    while (millis() - t0 < 1200 && n < sizeof(raw)) {
+      if (!Serial1.available()) continue;
+      uint8_t c = (uint8_t)Serial1.read();
+      raw[n++] = c;
+      if (c == 0x02) hasSTX = true;
+      if (c == 0x03) hasETX = true;
+      if (c == 0x06) hasACK = true;
+      if (c == 0x15) hasNAK = true;
+      if (c == 0x0D) hasCR = true;
+      if ((hasSTX && hasETX) || (hasCR && (hasACK || hasNAK))) break;
+    }
+
+    Serial.print("1C body="), Serial.println(body);
+    Serial.print("1C RX("), Serial.print(n), Serial.println(")");
+    if (n == 0) return false;
+
+    Serial.println("--text--");
+    for (size_t i = 0; i < n; i++) {
+      uint8_t c = raw[i];
+      if (c >= 0x20 && c <= 0x7E) Serial.write(c);
+      else Serial.write('.');
+    }
+    Serial.println();
+    Serial.println("--hex--");
+    hexDump(raw, n);
+    return true;
+  };
+
+  // WR only
+  return sendBody("WR0D200002");
+}
+
+bool readOnceAscii() {
+  // Mitsubishi MC protocol ASCII, no-procedure, station 0
+  // Try multiple candidate frames because serial ASCII layouts differ by config.
+  const char *frames[] = {
+    // 3E ASCII candidate (device 2000, points 2)
+    "500000FF03FF00000C001004010000D*0020000002",
+    // 3E ASCII candidate (head device in hex-like style)
+    "500000FF03FF00000C0010040100000007D0D*0002",
+    // 1E/Computer-link style trial
+    "00FFBRD0D2000002"
+  };
+
+  for (size_t k = 0; k < sizeof(frames)/sizeof(frames[0]); k++) {
+    const char *frm = frames[k];
+    while (Serial1.available()) Serial1.read();
+
+    rs485TxMode();
+    delayMicroseconds(100);
+    Serial1.write((const uint8_t*)frm, strlen(frm));
+    Serial1.flush();
+    delayMicroseconds(200);
+    rs485RxMode();
+
+    uint8_t res[196];
+    size_t n = 0;
+    unsigned long t0 = millis();
+    while (millis() - t0 < 900) {
+      while (Serial1.available() && n < sizeof(res)) res[n++] = (uint8_t)Serial1.read();
+    }
+
+    Serial.print("ASC tx#"), Serial.print(k), Serial.print(" RX("), Serial.print(n), Serial.println(")");
+    if (n > 0) {
+      // print as text + hex
+      Serial.println("--text--");
+      for (size_t i = 0; i < n; i++) Serial.write(res[i]);
+      Serial.println();
+      Serial.println("--hex--");
+      hexDump(res, n);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool readOnce1E() {
+  // Trial frame for Mitsubishi serial MC/Computer-link style (7O1)
+  // This is a probe frame to identify whether PLC expects 1E/Computer-link family.
+  const char *trial = "\x0500FFBRD0D2000002"; // ENQ + station/command/body (trial)
+
+  while (Serial1.available()) Serial1.read();
+  rs485TxMode();
+  delayMicroseconds(100);
+  Serial1.write((const uint8_t*)trial, strlen(trial));
+  Serial1.flush();
+  delayMicroseconds(150);
+  rs485RxMode();
+
+  uint8_t res[128];
+  size_t n = 0;
+  unsigned long t0 = millis();
+  while (millis() - t0 < 700) {
+    while (Serial1.available() && n < sizeof(res)) res[n++] = (uint8_t)Serial1.read();
+  }
+  Serial.print("RX1E("), Serial.print(n), Serial.println(")");
+  hexDump(res, n);
+  return n > 0;
 }
 
 void loop() {
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
-    if (cmd.equalsIgnoreCase("read")) {
-      Serial.println("ACK read");
+    if (cmd.equalsIgnoreCase("read") || cmd.equalsIgnoreCase("read3e")) {
+      Serial.println("ACK read3e");
       readOnce();
+    } else if (cmd.equalsIgnoreCase("read1e")) {
+      Serial.println("ACK read1e");
+      readOnce1E();
+    } else if (cmd.equalsIgnoreCase("readasc")) {
+      Serial.println("ACK readasc");
+      readOnceAscii();
+    } else if (cmd.equalsIgnoreCase("read1c")) {
+      Serial.println("ACK read1c");
+      readOnce1C();
     }
   }
   delay(5);
