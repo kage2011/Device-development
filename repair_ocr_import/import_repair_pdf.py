@@ -64,11 +64,14 @@ def parse_fields(text: str, pdf_name: str):
     if m2:
         equip_no = f"{m2.group(1).upper()}-{m2.group(2)}"
 
+    occurrence = pick([r"発生[^\n]*\s(段取り時|立ち上げ時|加工中|待機時|起動時)", r"発生時\s*[:：]\s*(.+)"] , text)
+    alarm_where = pick([r"アラーム内容/どこが\s*[:：]\s*(.+)", r"どこが\s*[:：]\s*(.+)"] , text)
     symptom = pick([r"症状\s*[:：]\s*(.+)", r"症状[^\n]*\n(.+)", r"症状\s*\(.*\)\s*\n(.+)"] , text)
     cause = pick([r"原因\s*[:：]\s*(.+)", r"原因[^\n]*\n(.+)"] , text)
     action = pick([r"処置\s*[:：]\s*(.+)", r"処置[^\n]*\n(.+)"] , text)
 
-    return {"date": date, "equip_no": equip_no, "symptom": symptom, "cause": cause, "action": action}
+    return {"date": date, "equip_no": equip_no, "occurrence": occurrence, "alarm_where": alarm_where,
+            "symptom": symptom, "cause": cause, "action": action}
 
 
 def generate_captures(pdf_path: str, rotation: int, out_dir: str):
@@ -86,7 +89,15 @@ def generate_captures(pdf_path: str, rotation: int, out_dir: str):
     subprocess.run(["tesseract", rot_path, outbase, "-l", "jpn", "--oem", "1", "--psm", "6", "tsv"], check=False)
     tsv_path = outbase + ".tsv"
 
-    keywords = {"symptom": ["症状"], "cause": ["原因"], "action": ["処置"]}
+    keywords = {
+        "date": ["修理依頼日", "年月日"],
+        "equip_no": ["設備No", "設備番号"],
+        "occurrence": ["発生発見", "発生時"],
+        "alarm_where": ["アラーム", "どこが"],
+        "symptom": ["症状"],
+        "cause": ["原因"],
+        "action": ["処置"],
+    }
     captures = {"page": rot_path}
 
     if not os.path.exists(tsv_path):
@@ -139,7 +150,7 @@ def append_excel(xlsx_path: str, fields: dict, source_pdf: str):
         equip_prefix = fields["equip_no"].split("-")[0]
 
     row = [
-        fields["date"], None, '-', '-', '修理報告書OCR取込', None, None,
+        fields["date"], None, '-', '-', (fields.get("alarm_where") or '修理報告書OCR取込'), None, fields.get("occurrence"),
         fields["symptom"], fields["cause"], fields["action"],
         None, None, equip_prefix, fields["equip_no"], None, None,
         f"元資料: {os.path.basename(source_pdf)} / OCR自動追記", None,
@@ -162,6 +173,8 @@ def main():
     ap.add_argument("--cause", default=None)
     ap.add_argument("--action", default=None)
     ap.add_argument("--equip-no", default=None)
+    ap.add_argument("--occurrence", default=None)
+    ap.add_argument("--alarm-where", default=None)
     args = ap.parse_args()
 
     rotation, txt = best_ocr(args.pdf)
@@ -187,13 +200,27 @@ def main():
         fields["action"] = args.action
     if args.equip_no:
         fields["equip_no"] = args.equip_no
+    if args.occurrence:
+        fields["occurrence"] = args.occurrence
+    if args.alarm_where:
+        fields["alarm_where"] = args.alarm_where
 
     if args.print_only or args.review:
         print("\n[確認依頼テンプレ]")
-        print("以下を確認してください（症状/原因/処置が違えばそのまま返信）")
-        print(f"症状: {fields.get('symptom')}")
-        print(f"原因: {fields.get('cause')}")
-        print(f"処置: {fields.get('action')}")
+        print("以下の形式で、OK か 修正文字列を返してください。")
+        checks = [
+            ("日時", fields.get("date"), captures.get("date")),
+            ("設備番号", fields.get("equip_no"), captures.get("equip_no")),
+            ("アラーム内容/どこが", fields.get("alarm_where"), captures.get("alarm_where")),
+            ("発生時", fields.get("occurrence"), captures.get("occurrence")),
+            ("症状/どう", fields.get("symptom"), captures.get("symptom")),
+            ("原因/部位", fields.get("cause"), captures.get("cause")),
+            ("処置", fields.get("action"), captures.get("action")),
+        ]
+        for label, val, cap in checks:
+            print(f"- {label}: {val} でいい？")
+            if cap:
+                print(f"  capture: {cap}")
         return
 
     row = append_excel(args.xlsx, fields, args.pdf)
