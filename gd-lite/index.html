@@ -31,26 +31,30 @@ const W=cvs.width,H=cvs.height,GROUND=260;
 let t=0, running=false, score=0, best=Number(localStorage.bestDashLite||0);
 let speed=5.2; // lowered difficulty
 const p={x:140,y:GROUND-28,w:26,h:26,vy:0,on:false,rot:0};
-let spikes=[], pads=[];
+let spikes=[], pads=[], particles=[];
 
-// lightweight synth beat (original melody not used)
+// energetic original synth loop (not copied melody)
 const ac = new (window.AudioContext||window.webkitAudioContext)();
-let beatInt=null;
+let beatInt=null, leadInt=null;
+function beep(freq=330, dur=0.08, vol=0.03, type='square'){
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.value=vol; o.connect(g); g.connect(ac.destination);
+  o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur); o.stop(ac.currentTime+dur+0.01);
+}
 function beat(on){
-  if(!on){clearInterval(beatInt); beatInt=null; return;}
-  if(beatInt) return;
-  beatInt=setInterval(()=>{
-    const o=ac.createOscillator(), g=ac.createGain();
-    o.type='square'; o.frequency.value = (Math.random()<0.2?220:330);
-    g.gain.value=0.03; o.connect(g); g.connect(ac.destination);
-    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+0.07); o.stop(ac.currentTime+0.08);
-  }, 210);
+  if(!on){clearInterval(beatInt); clearInterval(leadInt); beatInt=leadInt=null; return;}
+  if(beatInt||leadInt) return;
+  const kick=[110,0,220,0,110,0,260,0]; let i=0;
+  beatInt=setInterval(()=>{ const f=kick[i%kick.length]; if(f) beep(f,0.09,0.035,'square'); i++; }, 120);
+  const lead=[523,659,784,659,523,659,880,659]; let j=0;
+  leadInt=setInterval(()=>{ beep(lead[j%lead.length],0.06,0.015,'triangle'); j++; }, 240);
 }
 
 function reset(){
   t=0; score=0; speed=5.2;
   p.y=GROUND-28; p.vy=0; p.on=false; p.rot=0;
-  spikes=[]; pads=[];
+  spikes=[]; pads=[]; particles=[];
   for(let x=500;x<5000;x+=200+Math.random()*180){
     const hard = Math.random();
     // easier distribution
@@ -90,8 +94,17 @@ function update(){
   }
 }
 
+function explode(){
+  for(let i=0;i<30;i++) particles.push({
+    x:p.x+p.w/2,y:p.y+p.h/2,
+    vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,
+    r:2+Math.random()*4,a:1,c:['#40c4ff','#ff4081','#ffd740'][i%3]
+  });
+}
 function gameOver(){
+  explode();
   running=false; beat(false);
+  beep(120,0.25,0.06,'sawtooth');
   best=Math.max(best,score); localStorage.bestDashLite=best;
 }
 
@@ -119,11 +132,23 @@ function draw(){
   pads.forEach(p=>ctx.fillRect(p.x,GROUND-6,p.w,6));
 
   // player cube
-  ctx.save();
-  ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.rot);
-  ctx.fillStyle='#40c4ff'; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
-  ctx.fillStyle='#fff'; ctx.fillRect(-7,-7,4,4); ctx.fillRect(3,-7,4,4);
-  ctx.restore();
+  if(running){
+    ctx.save();
+    ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.rot);
+    ctx.fillStyle='#40c4ff'; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+    ctx.fillStyle='#fff'; ctx.fillRect(-7,-7,4,4); ctx.fillRect(3,-7,4,4);
+    ctx.restore();
+  }
+
+  // explosion particles
+  for(let i=particles.length-1;i>=0;i--){
+    const q=particles[i];
+    q.x+=q.vx; q.y+=q.vy; q.vy+=0.22; q.a-=0.02;
+    ctx.globalAlpha=Math.max(0,q.a);
+    ctx.fillStyle=q.c; ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+    if(q.a<=0) particles.splice(i,1);
+  }
 
   if(!running){
     ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(0,0,W,H);
