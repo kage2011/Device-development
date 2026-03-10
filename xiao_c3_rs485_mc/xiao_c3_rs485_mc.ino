@@ -31,6 +31,21 @@ SerialProfile g_invProfile = {19200, "8E2"};
 WebServer g_web(80);
 const char *AP_SSID = "RS485COM";
 
+struct PlcItem {
+  uint16_t addr;
+  String view;   // word|bit
+  uint8_t width; // 16|32
+  bool sign;
+};
+
+PlcItem g_plcItems[5] = {
+  {0, "word", 16, false},
+  {10, "word", 16, false},
+  {20, "word", 16, false},
+  {30, "word", 16, false},
+  {40, "word", 32, false},
+};
+
 uint32_t toSerialConfig(const String &fmt) {
   if (fmt == "7O1") return SERIAL_7O1;
   if (fmt == "7E1") return SERIAL_7E1;
@@ -102,6 +117,53 @@ size_t buildReadD2000Frame(uint8_t *out) {
   return sizeof(frame);
 }
 
+bool plcReadWords1C(uint16_t dAddr, uint8_t words, uint32_t &u32out) {
+  const uint8_t ENQ = 0x05;
+  const uint8_t CR  = 0x0D;
+
+  char body[32];
+  snprintf(body, sizeof(body), "00FFWR0D%04u%02X", dAddr, words);
+
+  while (Serial1.available()) Serial1.read();
+  rs485TxMode();
+  delayMicroseconds(120);
+  Serial1.write(ENQ);
+  Serial1.print(body);
+  Serial1.write(CR);
+  Serial1.flush();
+  rs485RxMode();
+
+  uint8_t raw[96]; size_t n = 0;
+  unsigned long t0 = millis();
+  while (millis() - t0 < 1200 && n < sizeof(raw)) {
+    if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
+  }
+
+  if (n >= 10 && raw[0] == 0x02 && raw[1] == '0' && raw[2] == '0' && raw[3] == 'F' && raw[4] == 'F') {
+    // STX 00FF [data...] ETX
+    int etx = -1;
+    for (size_t i = 5; i < n; i++) if (raw[i] == 0x03) { etx = (int)i; break; }
+    if (etx > 8) {
+      String data;
+      for (int i = 5; i < etx; i++) data += (char)raw[i];
+      if (words == 1 && data.length() >= 4) {
+        String h = data.substring(0,4);
+        u32out = (uint32_t)strtoul(h.c_str(), nullptr, 16);
+        return true;
+      }
+      if (words >= 2 && data.length() >= 8) {
+        String h1 = data.substring(0,4);
+        String h2 = data.substring(4,8);
+        uint16_t w1 = (uint16_t)strtoul(h1.c_str(), nullptr, 16);
+        uint16_t w2 = (uint16_t)strtoul(h2.c_str(), nullptr, 16);
+        u32out = ((uint32_t)w2 << 16) | w1;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 void setupWebUi() {
   g_web.on("/", HTTP_GET, []() {
     String html = R"HTML(
@@ -114,12 +176,23 @@ void setupWebUi() {
 <label>INV Baud<input id='invBaud' type='number'></label>
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
 <button onclick='save()'>Save & Apply</button>
+<h4>PLC Items (5)</h4>
+<div id='plcItems'></div>
+<button onclick='savePlc()'>Save PLC Items</button>
+<button onclick='readNow()'>Read Now</button>
 <pre id='st'></pre>
 <script>
+function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 async function load(){let r=await fetch('/cfg');let j=await r.json();
-mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;st.textContent=JSON.stringify(j,null,2)}
+mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;
+let pr=await fetch('/plccfg'); let pj=await pr.json(); plcItems.innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
+st.textContent=JSON.stringify(j,null,2)}
 async function save(){let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
 let r=await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});st.textContent=await r.text();setTimeout(load,300)}
+async function savePlc(){let p=new URLSearchParams();
+for(let i=0;i<5;i++){p.append('addr'+i,document.getElementById('a'+i).value);p.append('view'+i,document.getElementById('v'+i).value);p.append('width'+i,document.getElementById('w'+i).value);p.append('sign'+i,document.getElementById('s'+i).value)}
+let r=await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});st.textContent=await r.text();}
+async function readNow(){let r=await fetch('/plcread');st.textContent=await r.text();}
 load();
 </script></body></html>)HTML";
     g_web.send(200, "text/html", html);
@@ -143,6 +216,50 @@ load();
     if (g_web.hasArg("mode") && g_web.arg("mode") == "inv") applySerialProfile(MODE_INV_FRD820);
     else applySerialProfile(MODE_PLC_FX5_1C);
     g_web.send(200, "text/plain", "OK");
+  });
+
+  g_web.on("/plccfg", HTTP_GET, []() {
+    String j = "{\"items\":[";
+    for (int i = 0; i < 5; i++) {
+      if (i) j += ",";
+      j += "{\"addr\":" + String(g_plcItems[i].addr)
+        + ",\"view\":\"" + g_plcItems[i].view + "\""
+        + ",\"width\":" + String(g_plcItems[i].width)
+        + ",\"sign\":" + String(g_plcItems[i].sign ? "true" : "false")
+        + "}";
+    }
+    j += "]}";
+    g_web.send(200, "application/json", j);
+  });
+
+  g_web.on("/plcset", HTTP_POST, []() {
+    for (int i = 0; i < 5; i++) {
+      String kA = "addr" + String(i), kV = "view" + String(i), kW = "width" + String(i), kS = "sign" + String(i);
+      if (g_web.hasArg(kA)) g_plcItems[i].addr = (uint16_t)g_web.arg(kA).toInt();
+      if (g_web.hasArg(kV)) g_plcItems[i].view = g_web.arg(kV);
+      if (g_web.hasArg(kW)) g_plcItems[i].width = (uint8_t)g_web.arg(kW).toInt();
+      if (g_web.hasArg(kS)) g_plcItems[i].sign = (g_web.arg(kS) == "1");
+    }
+    g_web.send(200, "text/plain", "OK");
+  });
+
+  g_web.on("/plcread", HTTP_GET, []() {
+    applySerialProfile(MODE_PLC_FX5_1C);
+    String j = "{\"items\":[";
+    for (int i = 0; i < 5; i++) {
+      uint32_t u = 0;
+      uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
+      bool ok = plcReadWords1C(g_plcItems[i].addr, words, u);
+      if (i) j += ",";
+      j += "{\"idx\":" + String(i)
+        + ",\"addr\":" + String(g_plcItems[i].addr)
+        + ",\"ok\":" + String(ok ? "true" : "false")
+        + ",\"u32\":" + String(u)
+        + ",\"s32\":" + String((int32_t)u)
+        + "}";
+    }
+    j += "]}";
+    g_web.send(200, "application/json", j);
   });
 
   g_web.begin();
