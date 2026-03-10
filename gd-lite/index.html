@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dash Lite</title>
+  <style>
+    html,body{margin:0;background:#0b1020;color:#eaf2ff;font-family:system-ui}
+    #wrap{max-width:980px;margin:0 auto;padding:10px}
+    canvas{width:100%;height:auto;background:linear-gradient(#111a34,#0b1020);border:1px solid #2d3b6b;border-radius:10px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+    button{background:#3d5afe;color:#fff;border:0;border-radius:8px;padding:8px 12px}
+    .small{opacity:.8;font-size:12px}
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <h2>Dash Lite (練習向け)</h2>
+  <div class="row">
+    <button id="start">Start / Restart</button>
+    <span id="stat">score:0 best:0 speed:1.0x</span>
+  </div>
+  <canvas id="game" width="960" height="320"></canvas>
+  <div class="small">操作: Space / Click / Tap でジャンプ。原作そのままではなく、雰囲気寄せの自作版です。</div>
+</div>
+<script>
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+const stat = document.getElementById('stat');
+const W=cvs.width,H=cvs.height,GROUND=260;
+let t=0, running=false, score=0, best=Number(localStorage.bestDashLite||0);
+let speed=5.2; // lowered difficulty
+const p={x:140,y:GROUND-28,w:26,h:26,vy:0,on:false,rot:0};
+let spikes=[], pads=[];
+
+// lightweight synth beat (original melody not used)
+const ac = new (window.AudioContext||window.webkitAudioContext)();
+let beatInt=null;
+function beat(on){
+  if(!on){clearInterval(beatInt); beatInt=null; return;}
+  if(beatInt) return;
+  beatInt=setInterval(()=>{
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type='square'; o.frequency.value = (Math.random()<0.2?220:330);
+    g.gain.value=0.03; o.connect(g); g.connect(ac.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+0.07); o.stop(ac.currentTime+0.08);
+  }, 210);
+}
+
+function reset(){
+  t=0; score=0; speed=5.2;
+  p.y=GROUND-28; p.vy=0; p.on=false; p.rot=0;
+  spikes=[]; pads=[];
+  for(let x=500;x<5000;x+=200+Math.random()*180){
+    const hard = Math.random();
+    // easier distribution
+    if(hard<0.68) spikes.push({x,w:26,h:20+Math.random()*28});
+    else spikes.push({x,w:52,h:20+Math.random()*20,double:true});
+    if(Math.random()<0.22) pads.push({x:x-60,w:34,h:8});
+  }
+}
+
+function jump(){
+  if(!running) return;
+  if(p.on){ p.vy=-10.8; p.on=false; }
+}
+
+function rectHit(a,b){
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function update(){
+  if(!running) return;
+  t++; score=Math.floor(t/5);
+  speed=Math.min(8.0,5.2+t/1800);
+  p.vy += 0.55; p.y += p.vy;
+  if(p.y+p.h>=GROUND){p.y=GROUND-p.h;p.vy=0;p.on=true;p.rot=0;} else p.rot += 0.18;
+
+  spikes.forEach(s=>s.x-=speed);
+  pads.forEach(s=>s.x-=speed);
+
+  const me={x:p.x,y:p.y,w:p.w,h:p.h};
+  for(const s of spikes){
+    const hit={x:s.x+2,y:GROUND-s.h,w:s.w-4,h:s.h};
+    if(rectHit(me,hit)){ gameOver(); return; }
+  }
+  for(const pd of pads){
+    const hit={x:pd.x,y:GROUND-10,w:pd.w,h:10};
+    if(rectHit(me,hit) && p.vy>=0){ p.vy=-12.2; }
+  }
+}
+
+function gameOver(){
+  running=false; beat(false);
+  best=Math.max(best,score); localStorage.bestDashLite=best;
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // bg pulse
+  ctx.fillStyle=`rgba(120,80,255,${0.08+0.04*Math.sin(t*0.05)})`;
+  for(let i=0;i<14;i++) ctx.fillRect((i*80-(t*2)%80),0,40,H);
+
+  // ground
+  ctx.fillStyle='#1de9b6';
+  ctx.fillRect(0,GROUND,W,4);
+
+  // spikes
+  ctx.fillStyle='#ff5252';
+  spikes.forEach(s=>{
+    const x=s.x, y=GROUND;
+    if(s.double){
+      tri(x,y,s.w/2,s.h); tri(x+s.w/2,y,s.w/2,s.h*0.9);
+    }else tri(x,y,s.w,s.h);
+  });
+
+  // pads
+  ctx.fillStyle='#ffd740';
+  pads.forEach(p=>ctx.fillRect(p.x,GROUND-6,p.w,6));
+
+  // player cube
+  ctx.save();
+  ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.rot);
+  ctx.fillStyle='#40c4ff'; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+  ctx.fillStyle='#fff'; ctx.fillRect(-7,-7,4,4); ctx.fillRect(3,-7,4,4);
+  ctx.restore();
+
+  if(!running){
+    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.font='bold 34px sans-serif'; ctx.fillText('Click / Space to Start', 280, 140);
+    ctx.font='20px sans-serif'; ctx.fillText('練習向けに難易度を下げています', 320, 180);
+  }
+  stat.textContent=`score:${score} best:${best} speed:${speed.toFixed(1)}x`;
+}
+function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.closePath();ctx.fill();}
+
+function loop(){ update(); draw(); requestAnimationFrame(loop);} loop();
+
+document.getElementById('start').onclick=()=>{ reset(); running=true; ac.resume(); beat(true); };
+window.addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); if(!running){reset();running=true;ac.resume();beat(true);} else jump(); }});
+cvs.addEventListener('pointerdown',()=>{ if(!running){ reset(); running=true; ac.resume(); beat(true);} else jump(); });
+</script>
+</body>
+</html>
