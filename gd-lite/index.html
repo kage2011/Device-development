@@ -33,6 +33,7 @@ let t=0,running=false,clear=false,score=0,best=Number(localStorage.bestDashLite|
 let speed=4.05,goalX=39000;
 const p={x:120,y:GROUND-26,w:24,h:24,vy:0,on:false,rot:0};
 let spikes=[],pads=[],blocks=[],holes=[],ghosts=[],particles=[];
+let skulls=[];
 
 const ac = new (window.AudioContext||window.webkitAudioContext)();
 const bgm = new Audio('./bgm.mp3');
@@ -52,6 +53,22 @@ function reset(){
   p.y=GROUND-p.h; p.vy=0; p.on=true; p.rot=0;
   spikes=[];pads=[];blocks=[];holes=[];particles=[];
   mkGhosts();
+  skulls=[
+    {x:900,y:205,type:'pirate',s:0.58,l:0.35},{x:1200,y:185,type:'pirate',s:0.9,l:0.6},
+    {x:1800,y:198,type:'mage',s:0.62,l:0.4},{x:2400,y:190,type:'pirate',s:0.72,l:0.55},
+    {x:3200,y:174,type:'mage',s:0.95,l:0.65},{x:3600,y:165,type:'mage',s:1.0,l:0.7},
+    {x:4700,y:202,type:'pirate',s:0.6,l:0.35},{x:5600,y:188,type:'pirate',s:0.8,l:0.55},
+    {x:6900,y:150,type:'giant',s:1.4,l:0.8},{x:7600,y:198,type:'mage',s:0.62,l:0.35},
+    {x:8600,y:178,type:'pirate',s:0.9,l:0.6},{x:9800,y:178,type:'pirate',s:0.95,l:0.65},
+    {x:11200,y:196,type:'mage',s:0.66,l:0.4},{x:12800,y:160,type:'mage',s:1.05,l:0.7},
+    {x:14400,y:188,type:'pirate',s:0.82,l:0.55},{x:15700,y:205,type:'pirate',s:0.55,l:0.35},
+    {x:17100,y:145,type:'giant',s:1.5,l:0.82},{x:18600,y:182,type:'mage',s:0.9,l:0.62},
+    {x:21000,y:180,type:'pirate',s:0.9,l:0.6},{x:22600,y:196,type:'mage',s:0.66,l:0.38},
+    {x:24600,y:162,type:'mage',s:1.0,l:0.7},{x:26800,y:188,type:'pirate',s:0.85,l:0.55},
+    {x:29100,y:205,type:'pirate',s:0.58,l:0.35},{x:31200,y:176,type:'mage',s:0.93,l:0.62},
+    {x:33200,y:148,type:'giant',s:1.35,l:0.78},{x:35000,y:186,type:'pirate',s:0.88,l:0.58},
+    {x:36600,y:198,type:'mage',s:0.64,l:0.4},{x:38200,y:172,type:'pirate',s:0.96,l:0.66}
+  ];
 
   // Fixed handcrafted stage (no random).
   holes.push(
@@ -106,6 +123,7 @@ function update(){
   blocks.forEach(o=>o.x-=speed);
   holes.forEach(o=>o.x-=speed);
   ghosts.forEach(g=>{g.x-=speed*0.4*g.s; g.p+=0.03*g.s; if(g.x<-80) g.x=W+Math.random()*180;});
+  skulls.forEach(s=>s.x-=speed*(s.l||0.55));
   goalX-=speed;
 
   // ground segments with holes
@@ -145,6 +163,34 @@ function update(){
 }
 
 function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.closePath();ctx.fill();}
+function drawSkull(s){
+  const x=s.x,y=s.y,k=s.s;
+  ctx.save();
+  ctx.globalAlpha=Math.min(1,0.45 + (s.l||0.6));
+  // skull base
+  ctx.fillStyle='rgba(236,240,250,0.9)';
+  ctx.beginPath(); ctx.ellipse(x,y,18*k,15*k,0,0,Math.PI*2); ctx.fill();
+  ctx.fillRect(x-10*k,y+8*k,20*k,9*k);
+  // eyes
+  ctx.fillStyle='#101426';
+  ctx.beginPath(); ctx.arc(x-6*k,y-1*k,3.2*k,0,Math.PI*2); ctx.arc(x+6*k,y-1*k,3.2*k,0,Math.PI*2); ctx.fill();
+  // nose
+  ctx.beginPath(); ctx.moveTo(x,y+2*k); ctx.lineTo(x-2*k,y+6*k); ctx.lineTo(x+2*k,y+6*k); ctx.closePath(); ctx.fill();
+  // type accessories
+  if(s.type==='pirate'){
+    ctx.fillStyle='#d32f2f'; ctx.fillRect(x-20*k,y-10*k,40*k,6*k);
+    ctx.strokeStyle='#5d0d0d'; ctx.lineWidth=2*k; ctx.beginPath(); ctx.moveTo(x-14*k,y-8*k); ctx.lineTo(x+14*k,y-8*k); ctx.stroke();
+    ctx.fillStyle='#101426'; ctx.fillRect(x+2*k,y-4*k,8*k,8*k); // eyepatch
+  }else if(s.type==='mage'){
+    ctx.fillStyle='#7c4dff';
+    ctx.beginPath(); ctx.moveTo(x,y-28*k); ctx.lineTo(x-14*k,y-8*k); ctx.lineTo(x+14*k,y-8*k); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#ffd54f'; ctx.beginPath(); ctx.arc(x+4*k,y-18*k,2*k,0,Math.PI*2); ctx.fill();
+  }else if(s.type==='giant'){
+    ctx.strokeStyle='rgba(160,190,255,0.55)'; ctx.lineWidth=4*k;
+    ctx.strokeRect(x-28*k,y-24*k,56*k,50*k);
+  }
+  ctx.restore();
+}
 function draw(){
   ctx.clearRect(0,0,W,H);
 
@@ -182,6 +228,9 @@ function draw(){
     ctx.beginPath(); ctx.arc(g.x,y,20*g.s,Math.PI,0); ctx.rect(g.x-20*g.s,y,40*g.s,24*g.s); ctx.fill();
     ctx.globalAlpha=1;
   });
+
+  // themed skull set pieces
+  skulls.forEach(drawSkull);
 
   // ground + holes
   ctx.fillStyle='#1de9b6';
