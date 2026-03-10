@@ -5,164 +5,211 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dash Lite</title>
   <style>
-    html,body{margin:0;background:#0b1020;color:#eaf2ff;font-family:system-ui}
+    html,body{margin:0;background:#070a14;color:#eaf2ff;font-family:system-ui}
     #wrap{max-width:980px;margin:0 auto;padding:10px}
-    canvas{width:100%;height:auto;background:linear-gradient(#111a34,#0b1020);border:1px solid #2d3b6b;border-radius:10px}
+    canvas{width:100%;height:auto;background:linear-gradient(#131427,#090d19);border:1px solid #3c3f63;border-radius:10px}
     .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
-    button{background:#3d5afe;color:#fff;border:0;border-radius:8px;padding:8px 12px}
+    button{background:#5e6bff;color:#fff;border:0;border-radius:8px;padding:8px 12px}
     .small{opacity:.8;font-size:12px}
   </style>
 </head>
 <body>
 <div id="wrap">
-  <h2>Dash Lite (練習向け)</h2>
+  <h2>Dash Lite (2min stage)</h2>
   <div class="row">
     <button id="start">Start / Restart</button>
     <span id="stat">score:0 best:0 speed:1.0x</span>
   </div>
   <canvas id="game" width="960" height="320"></canvas>
-  <div class="small">操作: Space / Click / Tap でジャンプ。原作そのままではなく、雰囲気寄せの自作版です。</div>
+  <div class="small">操作: Space / Click / Tap でジャンプ。トゲ・穴・ブロックあり。ゴースト背景で流れる演出付き。</div>
 </div>
 <script>
 const cvs = document.getElementById('game');
 const ctx = cvs.getContext('2d');
 const stat = document.getElementById('stat');
-const W=cvs.width,H=cvs.height,GROUND=260;
-let t=0, running=false, score=0, best=Number(localStorage.bestDashLite||0);
-let speed=5.2; // lowered difficulty
-const p={x:140,y:GROUND-28,w:26,h:26,vy:0,on:false,rot:0};
-let spikes=[], pads=[], particles=[];
+const W=cvs.width,H=cvs.height,GROUND=262;
 
-// user-provided BGM
+let t=0,running=false,clear=false,score=0,best=Number(localStorage.bestDashLite||0);
+let speed=3.95,goalX=25000;
+const p={x:120,y:GROUND-26,w:24,h:24,vy:0,on:false,rot:0};
+let spikes=[],pads=[],blocks=[],holes=[],ghosts=[],particles=[];
+
 const ac = new (window.AudioContext||window.webkitAudioContext)();
 const bgm = new Audio('./bgm.mp3');
-bgm.loop = true;
-bgm.volume = 0.35;
-function beep(freq=330, dur=0.08, vol=0.03, type='square'){
-  const o=ac.createOscillator(), g=ac.createGain();
-  o.type=type; o.frequency.value=freq;
-  g.gain.value=vol; o.connect(g); g.connect(ac.destination);
-  o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur); o.stop(ac.currentTime+dur+0.01);
-}
-function beat(on){
-  if(!on){ bgm.pause(); bgm.currentTime=0; return; }
-  ac.resume();
-  bgm.play().catch(()=>{});
-}
+bgm.loop = true; bgm.volume=0.35;
+function beat(on){ if(!on){bgm.pause();bgm.currentTime=0;return;} ac.resume(); bgm.play().catch(()=>{}); }
+function beep(freq=130,dur=0.22,vol=0.05,type='sawtooth'){ const o=ac.createOscillator(),g=ac.createGain(); o.type=type;o.frequency.value=freq;g.gain.value=vol;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+dur);o.stop(ac.currentTime+dur+0.01);}
 
+function mkGhosts(){
+  ghosts=[];
+  for(let i=0;i<12;i++) ghosts.push({x:i*190+300,y:40+Math.random()*120,s:0.3+Math.random()*0.7,p:Math.random()*6.28});
+}
 function reset(){
-  t=0; score=0; speed=5.2;
-  p.y=GROUND-28; p.vy=0; p.on=false; p.rot=0;
-  spikes=[]; pads=[]; particles=[];
-  for(let x=500;x<5000;x+=200+Math.random()*180){
-    const hard = Math.random();
-    // easier distribution
-    if(hard<0.68) spikes.push({x,w:26,h:20+Math.random()*28});
-    else spikes.push({x,w:52,h:20+Math.random()*20,double:true});
-    if(Math.random()<0.22) pads.push({x:x-60,w:34,h:8});
+  t=0;score=0;clear=false;speed=3.95;goalX=25000;
+  p.y=GROUND-p.h; p.vy=0; p.on=true; p.rot=0;
+  spikes=[];pads=[];blocks=[];holes=[];particles=[];
+  mkGhosts();
+
+  // rhythm-ish placement (roughly 1 beat ~= 90px at this speed)
+  let x=620;
+  while(x<goalX-600){
+    const r=Math.random();
+    if(r<0.25){ // single spike
+      spikes.push({x,w:26,h:26}); x+=95;
+    }else if(r<0.42){ // double spike jump
+      spikes.push({x,w:50,h:24,double:true}); x+=130;
+    }else if(r<0.58){ // pit jump
+      holes.push({x,w:55+Math.random()*55}); x+=160;
+    }else if(r<0.76){ // block to jump onto
+      blocks.push({x,w:42,h:22+Math.random()*24});
+      spikes.push({x:x+58,w:22,h:20});
+      x+=170;
+    }else if(r<0.9){ // bounce pad section
+      pads.push({x,w:32});
+      spikes.push({x:x+70,w:24,h:22});
+      x+=150;
+    }else{ // rest
+      x+=85;
+    }
   }
 }
 
-function jump(){
-  if(!running) return;
-  if(p.on){ p.vy=-10.8; p.on=false; }
-}
-
-function rectHit(a,b){
-  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
-}
+function jump(){ if(running && p.on){ p.vy=-10.5; p.on=false; } }
+function rectHit(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+function spawnExplosion(){ for(let i=0;i<34;i++) particles.push({x:p.x+p.w/2,y:p.y+p.h/2,vx:(Math.random()-0.5)*9,vy:(Math.random()-0.5)*9,r:2+Math.random()*4,a:1,c:['#5cf2ff','#ff63a9','#ffd34d'][i%3]}); }
+function gameOver(){ if(!running) return; spawnExplosion(); running=false; beat(false); beep(); best=Math.max(best,score); localStorage.bestDashLite=best; }
 
 function update(){
   if(!running) return;
   t++; score=Math.floor(t/5);
-  speed=Math.min(8.0,5.2+t/1800);
-  p.vy += 0.55; p.y += p.vy;
-  if(p.y+p.h>=GROUND){p.y=GROUND-p.h;p.vy=0;p.on=true;p.rot=0;} else p.rot += 0.18;
+  speed=Math.min(4.9,3.95+t/5500);
 
-  spikes.forEach(s=>s.x-=speed);
-  pads.forEach(s=>s.x-=speed);
+  // gravity
+  p.vy+=0.56; p.y+=p.vy; p.on=false;
 
+  // move world
+  spikes.forEach(o=>o.x-=speed);
+  pads.forEach(o=>o.x-=speed);
+  blocks.forEach(o=>o.x-=speed);
+  holes.forEach(o=>o.x-=speed);
+  ghosts.forEach(g=>{g.x-=speed*0.4*g.s; g.p+=0.03*g.s; if(g.x<-80) g.x=W+Math.random()*180;});
+  goalX-=speed;
+
+  // ground segments with holes
+  let onGround=false;
   const me={x:p.x,y:p.y,w:p.w,h:p.h};
+  const touchingHole = holes.some(h=> me.x+me.w>h.x && me.x<h.x+h.w);
+  if(!touchingHole && p.y+p.h>=GROUND){ p.y=GROUND-p.h; p.vy=0; onGround=true; }
+
+  // block top collision
+  for(const b of blocks){
+    const top={x:b.x,y:GROUND-b.h,w:b.w,h:10};
+    if(rectHit(me,top) && p.vy>=0 && (p.y+p.h) < (GROUND-b.h+14)){
+      p.y=GROUND-b.h-p.h; p.vy=0; onGround=true;
+    }
+  }
+
+  // hazards
   for(const s of spikes){
     const hit={x:s.x+2,y:GROUND-s.h,w:s.w-4,h:s.h};
     if(rectHit(me,hit)){ gameOver(); return; }
   }
-  for(const pd of pads){
-    const hit={x:pd.x,y:GROUND-10,w:pd.w,h:10};
-    if(rectHit(me,hit) && p.vy>=0){ p.vy=-12.2; }
+  for(const b of blocks){ // side hit on block = death for dash-like feel
+    const side={x:b.x,y:GROUND-b.h,w:b.w,h:b.h};
+    if(rectHit(me,side) && p.y+p.h>GROUND-b.h+12){ gameOver(); return; }
   }
+  if(me.y>H+40){ gameOver(); return; }
+
+  for(const pd of pads){
+    const hit={x:pd.x,y:GROUND-8,w:pd.w,h:8};
+    if(rectHit(me,hit) && p.vy>=0){ p.vy=-12.0; }
+  }
+
+  p.on=onGround;
+  if(!p.on) p.rot+=0.2; else p.rot*=0.75;
+
+  if(goalX < p.x + p.w){ clear=true; running=false; beat(false); best=Math.max(best,score); localStorage.bestDashLite=best; }
 }
 
-function explode(){
-  for(let i=0;i<30;i++) particles.push({
-    x:p.x+p.w/2,y:p.y+p.h/2,
-    vx:(Math.random()-0.5)*8,vy:(Math.random()-0.5)*8,
-    r:2+Math.random()*4,a:1,c:['#40c4ff','#ff4081','#ffd740'][i%3]
-  });
-}
-function gameOver(){
-  explode();
-  running=false; beat(false);
-  beep(120,0.25,0.06,'sawtooth');
-  best=Math.max(best,score); localStorage.bestDashLite=best;
-}
-
+function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.closePath();ctx.fill();}
 function draw(){
   ctx.clearRect(0,0,W,H);
-  // bg pulse
-  ctx.fillStyle=`rgba(120,80,255,${0.08+0.04*Math.sin(t*0.05)})`;
-  for(let i=0;i<14;i++) ctx.fillRect((i*80-(t*2)%80),0,40,H);
 
-  // ground
+  // ghostly sky layers
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#17192c'); grad.addColorStop(1,'#0a0d18');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=`rgba(149,120,255,${0.05+0.04*Math.sin(t*0.02)})`;
+  for(let i=0;i<16;i++) ctx.fillRect((i*90-(t*1.5)%90),0,42,H);
+
+  // moon
+  ctx.fillStyle='rgba(215,230,255,0.18)'; ctx.beginPath(); ctx.arc(820,60,40,0,Math.PI*2); ctx.fill();
+
+  // ghosts
+  ghosts.forEach(g=>{
+    const y=g.y+Math.sin(g.p)*8;
+    ctx.globalAlpha=0.23*g.s;
+    ctx.fillStyle='#d3e5ff';
+    ctx.beginPath(); ctx.arc(g.x,y,20*g.s,Math.PI,0); ctx.rect(g.x-20*g.s,y,40*g.s,24*g.s); ctx.fill();
+    ctx.globalAlpha=1;
+  });
+
+  // ground + holes
   ctx.fillStyle='#1de9b6';
-  ctx.fillRect(0,GROUND,W,4);
+  let cursor=0;
+  const sorted=[...holes].sort((a,b)=>a.x-b.x);
+  for(const h of sorted){
+    const x=Math.max(0,h.x), w=Math.max(0,Math.min(W,h.x+h.w)-x);
+    if(x>cursor) ctx.fillRect(cursor,GROUND,x-cursor,4);
+    cursor=Math.max(cursor,x+w);
+  }
+  if(cursor<W) ctx.fillRect(cursor,GROUND,W-cursor,4);
+
+  // blocks
+  ctx.fillStyle='#8fa6ff';
+  blocks.forEach(b=>ctx.fillRect(b.x,GROUND-b.h,b.w,b.h));
 
   // spikes
   ctx.fillStyle='#ff5252';
-  spikes.forEach(s=>{
-    const x=s.x, y=GROUND;
-    if(s.double){
-      tri(x,y,s.w/2,s.h); tri(x+s.w/2,y,s.w/2,s.h*0.9);
-    }else tri(x,y,s.w,s.h);
-  });
+  spikes.forEach(s=>{ if(s.double){tri(s.x,GROUND,s.w/2,s.h);tri(s.x+s.w/2,GROUND,s.w/2,s.h*0.9);} else tri(s.x,GROUND,s.w,s.h); });
 
   // pads
   ctx.fillStyle='#ffd740';
   pads.forEach(p=>ctx.fillRect(p.x,GROUND-6,p.w,6));
 
-  // player cube
+  // goal gate
+  ctx.fillStyle='#7cffb0'; ctx.fillRect(goalX,GROUND-100,12,100);
+  ctx.fillStyle='#d8ffe8'; ctx.fillRect(goalX-10,GROUND-112,36,10);
+
+  // player
   if(running){
-    ctx.save();
-    ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.rot);
+    ctx.save(); ctx.translate(p.x+p.w/2,p.y+p.h/2); ctx.rotate(p.rot);
     ctx.fillStyle='#40c4ff'; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
     ctx.fillStyle='#fff'; ctx.fillRect(-7,-7,4,4); ctx.fillRect(3,-7,4,4);
     ctx.restore();
   }
 
-  // explosion particles
+  // particles
   for(let i=particles.length-1;i>=0;i--){
-    const q=particles[i];
-    q.x+=q.vx; q.y+=q.vy; q.vy+=0.22; q.a-=0.02;
-    ctx.globalAlpha=Math.max(0,q.a);
-    ctx.fillStyle=q.c; ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,Math.PI*2); ctx.fill();
-    ctx.globalAlpha=1;
+    const q=particles[i]; q.x+=q.vx; q.y+=q.vy; q.vy+=0.24; q.a-=0.02;
+    ctx.globalAlpha=Math.max(0,q.a); ctx.fillStyle=q.c; ctx.beginPath(); ctx.arc(q.x,q.y,q.r,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1;
     if(q.a<=0) particles.splice(i,1);
   }
 
   if(!running){
-    ctx.fillStyle='rgba(0,0,0,.45)'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='#fff'; ctx.font='bold 34px sans-serif'; ctx.fillText('Click / Space to Start', 280, 140);
-    ctx.font='20px sans-serif'; ctx.fillText('練習向けに難易度を下げています', 320, 180);
+    ctx.fillStyle='rgba(0,0,0,.42)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#fff'; ctx.font='bold 34px sans-serif';
+    ctx.fillText(clear?'GOAL! Click / Space to Retry':'Click / Space to Start', clear?250:280, 140);
+    ctx.font='20px sans-serif'; ctx.fillText('約2分ステージ / ゴースト背景 / 穴・ブロック・トゲ', 245, 180);
   }
   stat.textContent=`score:${score} best:${best} speed:${speed.toFixed(1)}x`;
 }
-function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.closePath();ctx.fill();}
 
 function loop(){ update(); draw(); requestAnimationFrame(loop);} loop();
 
 document.getElementById('start').onclick=()=>{ reset(); running=true; ac.resume(); beat(true); };
 window.addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); if(!running){reset();running=true;ac.resume();beat(true);} else jump(); }});
-cvs.addEventListener('pointerdown',()=>{ if(!running){ reset(); running=true; ac.resume(); beat(true);} else jump(); });
+cvs.addEventListener('pointerdown',()=>{ if(!running){reset();running=true;ac.resume();beat(true);} else jump(); });
 </script>
 </body>
 </html>
