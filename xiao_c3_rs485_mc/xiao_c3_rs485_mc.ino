@@ -136,8 +136,82 @@ void setup() {
   applySerialProfile(MODE_PLC_FX5_1C);
 
   Serial.println("xiao_c3_rs485_mc ready");
-  Serial.println("type: read3e / read1e / readasc / read1c");
+  Serial.println("type: read3e / read1e / readasc / read1c / readinv");
   Serial.println("type: setproto plc / setproto inv / proto");
+}
+
+bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
+  const uint8_t ENQ = 0x05;
+  const uint8_t CR = 0x0D;
+  const uint8_t LF = 0x0A;
+
+  auto trySend = [&](const String &body, bool addLF) -> bool {
+    while (Serial1.available()) Serial1.read();
+
+    rs485TxMode();
+    delayMicroseconds(120);
+    Serial1.write(ENQ);
+    Serial1.print(body);
+    Serial1.write(CR);
+    if (addLF) Serial1.write(LF);
+    Serial1.flush();
+    rs485RxMode();
+
+    uint8_t raw[96]; size_t n = 0;
+    unsigned long t0 = millis();
+    while (millis() - t0 < 900 && n < sizeof(raw)) {
+      if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
+    }
+
+    Serial.print("INV tx body="); Serial.print(body);
+    Serial.print(addLF ? " +LF" : "");
+    Serial.print(" RX("); Serial.print(n); Serial.println(")");
+    if (n == 0) return false;
+    hexDump(raw, n);
+
+    // expected: STX + station(2) + data(4hex) + ETX (+optional checksum/crlf)
+    int stx = -1, etx = -1;
+    for (size_t i = 0; i < n; i++) if (raw[i] == 0x02) { stx = (int)i; break; }
+    for (size_t i = stx + 1; i < (int)n; i++) if (raw[i] == 0x03) { etx = (int)i; break; }
+    if (stx >= 0 && etx > stx + 2) {
+      String payload;
+      for (int i = stx + 1; i < etx; i++) payload += (char)raw[i];
+      // payload usually: "00" + "hhhh"
+      if (payload.length() >= 6) {
+        String h = payload.substring(payload.length() - 4);
+        valueOut = (uint16_t)strtoul(h.c_str(), nullptr, 16);
+        Serial.print("INV parsed="); Serial.println(h);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // command read patterns: station + cmd (+ optional wait)
+  String b1 = String("00") + cmd2;
+  String b2 = String("00") + cmd2 + "0";
+
+  if (trySend(b1, false)) return true;
+  if (trySend(b2, false)) return true;
+  if (trySend(b1, true)) return true;
+  if (trySend(b2, true)) return true;
+  return false;
+}
+
+bool readInverterMonitors() {
+  uint16_t f=0,i=0,v=0;
+  bool okF = readInverterOnce("6F", f); // output frequency (0.01Hz)
+  bool okI = readInverterOnce("70", i); // output current (0.01A)
+  bool okV = readInverterOnce("71", v); // output voltage (0.1V)
+
+  if (okF) { Serial.print("INV freq_Hz="); Serial.println(f / 100.0f, 2); }
+  else Serial.println("INV freq read NG");
+  if (okI) { Serial.print("INV current_A="); Serial.println(i / 100.0f, 2); }
+  else Serial.println("INV current read NG");
+  if (okV) { Serial.print("INV voltage_V="); Serial.println(v / 10.0f, 1); }
+  else Serial.println("INV voltage read NG");
+
+  return okF || okI || okV;
 }
 
 bool readOnce1C() {
@@ -303,6 +377,9 @@ void loop() {
     } else if (cmd.equalsIgnoreCase("read1c")) {
       Serial.println("ACK read1c");
       readOnce1C();
+    } else if (cmd.equalsIgnoreCase("readinv")) {
+      Serial.println("ACK readinv");
+      readInverterMonitors();
     } else if (cmd.equalsIgnoreCase("setproto plc")) {
       applySerialProfile(MODE_PLC_FX5_1C);
     } else if (cmd.equalsIgnoreCase("setproto inv")) {
