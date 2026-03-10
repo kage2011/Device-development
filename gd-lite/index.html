@@ -33,7 +33,7 @@ let t=0,running=false,clear=false,score=0,best=Number(localStorage.bestDashLite|
 let speed=4.05,goalX=39000;
 const p={x:120,y:GROUND-26,w:24,h:24,vy:0,on:false,rot:0};
 let spikes=[],pads=[],blocks=[],holes=[],ghosts=[],particles=[];
-let skulls=[];
+let skulls=[],floaters=[],vspikes=[];
 
 const ac = new (window.AudioContext||window.webkitAudioContext)();
 const bgm = new Audio('./bgm.mp3');
@@ -53,6 +53,23 @@ function reset(){
   p.y=GROUND-p.h; p.vy=0; p.on=true; p.rot=0;
   spikes=[];pads=[];blocks=[];holes=[];particles=[];
   mkGhosts();
+  floaters=[
+    {x:420,y:GROUND-70,w:28,h:10,a:0,spd:0.035},
+    {x:5200,y:GROUND-90,w:30,h:10,a:1.1,spd:0.03},
+    {x:9400,y:GROUND-75,w:28,h:10,a:2.0,spd:0.04},
+    {x:14100,y:GROUND-85,w:30,h:10,a:0.5,spd:0.032},
+    {x:19600,y:GROUND-80,w:28,h:10,a:1.7,spd:0.036},
+    {x:25700,y:GROUND-88,w:30,h:10,a:2.4,spd:0.03},
+    {x:31800,y:GROUND-78,w:28,h:10,a:1.2,spd:0.038},
+    {x:37200,y:GROUND-86,w:30,h:10,a:2.8,spd:0.033}
+  ];
+  vspikes=[
+    {x:6400,y:GROUND-110,w:20,h:20,a:0,amp:22,spd:0.05},
+    {x:12300,y:GROUND-120,w:20,h:20,a:1.2,amp:20,spd:0.045},
+    {x:17600,y:GROUND-110,w:20,h:20,a:2.0,amp:24,spd:0.05},
+    {x:26600,y:GROUND-120,w:20,h:20,a:0.7,amp:20,spd:0.047},
+    {x:34100,y:GROUND-115,w:20,h:20,a:1.8,amp:22,spd:0.05}
+  ];
   skulls=[
     {x:900,y:205,type:'pirate',s:0.58,l:0.35},{x:1200,y:185,type:'pirate',s:0.9,l:0.6},
     {x:1800,y:198,type:'mage',s:0.62,l:0.4},{x:2400,y:190,type:'pirate',s:0.72,l:0.55},
@@ -123,7 +140,9 @@ function update(){
   blocks.forEach(o=>o.x-=speed);
   holes.forEach(o=>o.x-=speed);
   ghosts.forEach(g=>{g.x-=speed*0.4*g.s; g.p+=0.03*g.s; if(g.x<-80) g.x=W+Math.random()*180;});
-  skulls.forEach(s=>s.x-=speed*(s.l||0.55));
+  skulls.forEach(s=>{ s.x-=speed*(s.l||0.55); s.p=(s.p||0)+(0.03*(s.l||0.6)); });
+  floaters.forEach(f=>{ f.x-=speed; f.a+=f.spd; });
+  vspikes.forEach(v=>{ v.x-=speed; v.a+=v.spd; });
   goalX-=speed;
 
   // ground segments with holes
@@ -140,6 +159,15 @@ function update(){
     }
   }
 
+  // moving floating platforms (vertical gimmick)
+  for(const f of floaters){
+    const fy = f.y + Math.sin(f.a)*18;
+    const top={x:f.x,y:fy,w:f.w,h:9};
+    if(rectHit(me,top) && p.vy>=0 && (p.y+p.h) < (fy+14)){
+      p.y=fy-p.h; p.vy=0; onGround=true;
+    }
+  }
+
   // hazards
   for(const s of spikes){
     const hit={x:s.x+2,y:GROUND-s.h,w:s.w-4,h:s.h};
@@ -148,6 +176,11 @@ function update(){
   for(const b of blocks){ // side hit on block = death for dash-like feel
     const side={x:b.x,y:GROUND-b.h,w:b.w,h:b.h};
     if(rectHit(me,side) && p.y+p.h>GROUND-b.h+12){ gameOver(); return; }
+  }
+  for(const v of vspikes){
+    const vy=v.y+Math.sin(v.a)*v.amp;
+    const hit={x:v.x,y:vy,w:v.w,h:v.h};
+    if(rectHit(me,hit)){ gameOver(); return; }
   }
   if(me.y>H+40){ gameOver(); return; }
 
@@ -164,7 +197,7 @@ function update(){
 
 function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.lineTo(x+w,y);ctx.closePath();ctx.fill();}
 function drawSkull(s){
-  const x=s.x,y=s.y,k=s.s;
+  const x=s.x,y=s.y+Math.sin(s.p||0)*10,k=s.s;
   ctx.save();
   ctx.globalAlpha=Math.min(1,0.45 + (s.l||0.6));
   // skull base
@@ -247,9 +280,25 @@ function draw(){
   ctx.fillStyle='#8fa6ff';
   blocks.forEach(b=>ctx.fillRect(b.x,GROUND-b.h,b.w,b.h));
 
+  // moving bone platforms (vertical motion)
+  floaters.forEach(f=>{
+    const fy=f.y+Math.sin(f.a)*18;
+    ctx.fillStyle='#dfe7ff';
+    ctx.fillRect(f.x,fy,f.w,f.h);
+    ctx.fillStyle='#9aa7d8';
+    ctx.fillRect(f.x+4,fy+2,6,6);
+    ctx.fillRect(f.x+f.w-10,fy+2,6,6);
+  });
+
   // spikes
   ctx.fillStyle='#ff5252';
   spikes.forEach(s=>{ if(s.double){tri(s.x,GROUND,s.w/2,s.h);tri(s.x+s.w/2,GROUND,s.w/2,s.h*0.9);} else tri(s.x,GROUND,s.w,s.h); });
+
+  // vertical moving spikes
+  vspikes.forEach(v=>{
+    const vy=v.y+Math.sin(v.a)*v.amp;
+    tri(v.x,vy+v.h,v.w,v.h);
+  });
 
   // pads
   ctx.fillStyle='#ffd740';
