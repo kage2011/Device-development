@@ -33,9 +33,11 @@ let speed=5.2; // lowered difficulty
 const p={x:140,y:GROUND-28,w:26,h:26,vy:0,on:false,rot:0};
 let spikes=[], pads=[], particles=[];
 
-// energetic original synth loop (not copied melody)
+// user-provided BGM
 const ac = new (window.AudioContext||window.webkitAudioContext)();
-let beatInt=null, leadInt=null;
+const bgm = new Audio('./bgm.mp3');
+bgm.loop = true;
+bgm.volume = 0.35;
 function beep(freq=330, dur=0.08, vol=0.03, type='square'){
   const o=ac.createOscillator(), g=ac.createGain();
   o.type=type; o.frequency.value=freq;
@@ -43,12 +45,9 @@ function beep(freq=330, dur=0.08, vol=0.03, type='square'){
   o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur); o.stop(ac.currentTime+dur+0.01);
 }
 function beat(on){
-  if(!on){clearInterval(beatInt); clearInterval(leadInt); beatInt=leadInt=null; return;}
-  if(beatInt||leadInt) return;
-  const kick=[110,0,220,0,110,0,260,0]; let i=0;
-  beatInt=setInterval(()=>{ const f=kick[i%kick.length]; if(f) beep(f,0.09,0.035,'square'); i++; }, 120);
-  const lead=[523,659,784,659,523,659,880,659]; let j=0;
-  leadInt=setInterval(()=>{ beep(lead[j%lead.length],0.06,0.015,'triangle'); j++; }, 240);
+  if(!on){ bgm.pause(); bgm.currentTime=0; return; }
+  ac.resume();
+  bgm.play().catch(()=>{});
 }
 
 function reset(){
