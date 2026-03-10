@@ -120,100 +120,82 @@ void setup() {
 }
 
 bool readOnce1C() {
-  // 1C / no-procedure style: ENQ + "00FF" + body + CR (checksum OFF)
+  // Reuse the proven communication style from user's PlatformIO sample
   const uint8_t ENQ = 0x05;
   const uint8_t CR  = 0x0D;
 
-  auto clearRxQuiet = [&]() {
-    unsigned long tEnd = millis() + 30;
-    while (millis() < tEnd) {
-      while (Serial1.available()) {
-        Serial1.read();
-        tEnd = millis() + 20;
-      }
-    }
-  };
-
   auto sendBody = [&](const char *body) {
-    clearRxQuiet();
+    // clear stale RX bytes
+    while (Serial1.available()) Serial1.read();
 
     rs485TxMode();
     delayMicroseconds(120);
+
+    // ENQ + station + pc + body + CR (checksum OFF)
     Serial1.write(ENQ);
-    Serial1.print("00");  // station
-    Serial1.print("FF");  // pc no
-    Serial1.print(body);   // e.g. WR0D200002
+    Serial1.print("00");
+    Serial1.print("FF");
+    Serial1.print(body);
     Serial1.write(CR);
     Serial1.flush();
 
-    delayMicroseconds(220);
     rs485RxMode();
-    delayMicroseconds(120);
 
     uint8_t raw[196];
     size_t n = 0;
-    char buf[96];
-    size_t bi = 0;
+    char parsed[96];
+    size_t pi = 0;
+
     bool hasSTX = false, hasETX = false, hasACK = false, hasNAK = false, hasCR = false;
     unsigned long t0 = millis();
-    unsigned long lastRx = t0;
 
-    while (millis() - t0 < 2000 && n < sizeof(raw)) {
-      if (Serial1.available()) {
-        uint8_t c = (uint8_t)Serial1.read();
-        raw[n++] = c;
-        lastRx = millis();
+    while (millis() - t0 < 1600 && n < sizeof(raw)) {
+      if (!Serial1.available()) continue;
+      uint8_t c = (uint8_t)Serial1.read();
+      raw[n++] = c;
 
-        bool shouldBuffer = true;
-        if (c == 0x02) { hasSTX = true; shouldBuffer = false; }
-        if (c == 0x03) { hasETX = true; shouldBuffer = false; }
-        if (c == 0x06) { hasACK = true; shouldBuffer = false; }
-        if (c == 0x15) { hasNAK = true; shouldBuffer = false; }
-        if (c == 0x0D) { hasCR  = true; shouldBuffer = false; }
+      bool keep = true;
+      if (c == 0x02) { hasSTX = true; keep = false; }
+      else if (c == 0x03) { hasETX = true; keep = false; }
+      else if (c == 0x06) { hasACK = true; keep = false; }
+      else if (c == 0x15) { hasNAK = true; keep = false; }
+      else if (c == 0x0D) { hasCR  = true; keep = false; }
 
-        if (shouldBuffer && bi < sizeof(buf) - 1) buf[bi++] = (char)c;
-      }
+      if (keep && pi < sizeof(parsed)-1) parsed[pi++] = (char)c;
 
-      // complete frame captured; wait a short quiet window for trailing bytes
-      if ((hasSTX && hasETX) || (hasCR && (hasACK || hasNAK))) {
-        if (millis() - lastRx > 50) break;
-      }
+      if ((hasSTX && hasETX) || (hasCR && (hasACK || hasNAK))) break;
     }
-    buf[bi] = '\0';
+    parsed[pi] = '\0';
 
-    Serial.print("1C body="), Serial.println(body);
-    Serial.print("1C RX("), Serial.print(n), Serial.println(")");
-    Serial.print("1C parsed="), Serial.println(buf);
-    if (n == 0) return false;
-
+    Serial.print("1C body="); Serial.println(body);
+    Serial.print("1C RX("); Serial.print(n); Serial.println(")");
+    Serial.print("1C parsed="); Serial.println(parsed);
     Serial.println("--hex--");
     hexDump(raw, n);
 
-    // prefer stable 14-byte frame: STX + "00FF" + 8 hex chars + ETX
     if (n == 14 && raw[0] == 0x02 && raw[13] == 0x03 &&
         raw[1] == '0' && raw[2] == '0' && raw[3] == 'F' && raw[4] == 'F') {
       char h1[5] = {(char)raw[5], (char)raw[6], (char)raw[7], (char)raw[8], 0};
       char h2[5] = {(char)raw[9], (char)raw[10], (char)raw[11], (char)raw[12], 0};
       uint16_t w1 = (uint16_t)strtoul(h1, nullptr, 16);
       uint16_t w2 = (uint16_t)strtoul(h2, nullptr, 16);
-      uint32_t u32_lohi = ((uint32_t)w2 << 16) | w1;
-      uint32_t u32_hilo = ((uint32_t)w1 << 16) | w2;
-      int32_t s32_lohi = (u32_lohi < 0x80000000UL) ? (int32_t)u32_lohi : (int32_t)(u32_lohi - 0x100000000ULL);
-      int32_t s32_hilo = (u32_hilo < 0x80000000UL) ? (int32_t)u32_hilo : (int32_t)(u32_hilo - 0x100000000ULL);
-      Serial.print("1C decode14 w1="); Serial.print(h1);
+      uint32_t u32 = ((uint32_t)w2 << 16) | w1;
+      int32_t s32 = (u32 < 0x80000000UL) ? (int32_t)u32 : (int32_t)(u32 - 0x100000000ULL);
+      Serial.print("decode14 w1="); Serial.print(h1);
       Serial.print(" w2="); Serial.println(h2);
-      Serial.print("1C decode14 lohi_u32="); Serial.print(u32_lohi);
-      Serial.print(" lohi_s32="); Serial.println(s32_lohi);
-      Serial.print("1C decode14 hilo_u32="); Serial.print(u32_hilo);
-      Serial.print(" hilo_s32="); Serial.println(s32_hilo);
+      Serial.print("decode14 u32="); Serial.print(u32);
+      Serial.print(" s32="); Serial.println(s32);
+      return true;
     }
-    return true;
+
+    return false;
   };
 
-  // Alternate known points: D0 and D2000
-  bool any = false;
-  any |= sendBody("WR0D200002");   // D2000-D2001
-  return any;
+  for (int i = 0; i < 3; i++) {
+    if (sendBody("WR0D200002")) return true;
+    delay(900);
+  }
+  return false;
 }
 
 bool readOnceAscii() {
