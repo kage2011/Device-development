@@ -188,14 +188,31 @@ bool readOnce1C() {
 
     Serial.println("--hex--");
     hexDump(raw, n);
+
+    // prefer stable 14-byte frame: STX + "00FF" + 8 hex chars + ETX
+    if (n == 14 && raw[0] == 0x02 && raw[13] == 0x03 &&
+        raw[1] == '0' && raw[2] == '0' && raw[3] == 'F' && raw[4] == 'F') {
+      char h1[5] = {(char)raw[5], (char)raw[6], (char)raw[7], (char)raw[8], 0};
+      char h2[5] = {(char)raw[9], (char)raw[10], (char)raw[11], (char)raw[12], 0};
+      uint16_t w1 = (uint16_t)strtoul(h1, nullptr, 16);
+      uint16_t w2 = (uint16_t)strtoul(h2, nullptr, 16);
+      uint32_t u32_lohi = ((uint32_t)w2 << 16) | w1;
+      uint32_t u32_hilo = ((uint32_t)w1 << 16) | w2;
+      int32_t s32_lohi = (u32_lohi < 0x80000000UL) ? (int32_t)u32_lohi : (int32_t)(u32_lohi - 0x100000000ULL);
+      int32_t s32_hilo = (u32_hilo < 0x80000000UL) ? (int32_t)u32_hilo : (int32_t)(u32_hilo - 0x100000000ULL);
+      Serial.print("1C decode14 w1="); Serial.print(h1);
+      Serial.print(" w2="); Serial.println(h2);
+      Serial.print("1C decode14 lohi_u32="); Serial.print(u32_lohi);
+      Serial.print(" lohi_s32="); Serial.println(s32_lohi);
+      Serial.print("1C decode14 hilo_u32="); Serial.print(u32_hilo);
+      Serial.print(" hilo_s32="); Serial.println(s32_hilo);
+    }
     return true;
   };
 
   // Alternate known points: D0 and D2000
   bool any = false;
-  any |= sendBody("WR0D000002");
-  delay(1800);
-  any |= sendBody("WR0D200002");
+  any |= sendBody("WR0D200002");   // D2000-D2001
   return any;
 }
 
