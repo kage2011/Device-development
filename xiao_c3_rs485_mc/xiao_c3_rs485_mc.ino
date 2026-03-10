@@ -11,6 +11,27 @@ static const int PIN_TX = 21;  // DI -> TX
 // FX5U MC protocol target
 static const uint8_t STATION_NO = 0x00;
 
+enum ProtoMode {
+  MODE_PLC_FX5_1C,
+  MODE_INV_FRD820,
+};
+
+ProtoMode g_mode = MODE_PLC_FX5_1C;
+
+void applySerialProfile(ProtoMode mode) {
+  Serial1.end();
+  if (mode == MODE_PLC_FX5_1C) {
+    // PLC profile: MC 1C no-procedure
+    Serial1.begin(9600, SERIAL_7O1, PIN_RX, PIN_TX);
+    Serial.println("profile=plc (9600 7O1)");
+  } else {
+    // Inverter profile: FR-D820 no-procedure
+    Serial1.begin(19200, SERIAL_8E2, PIN_RX, PIN_TX);
+    Serial.println("profile=inv (19200 8E2)");
+  }
+  g_mode = mode;
+}
+
 void rs485RxMode() {
   digitalWrite(PIN_DE, LOW);
   digitalWrite(PIN_RE, LOW);
@@ -112,11 +133,11 @@ void setup() {
   pinMode(PIN_DE, OUTPUT);
   rs485RxMode();
 
-  // User specified: 7-bit, odd parity, 1 stop, 9600
-  Serial1.begin(9600, SERIAL_7O1, PIN_RX, PIN_TX);
+  applySerialProfile(MODE_PLC_FX5_1C);
 
   Serial.println("xiao_c3_rs485_mc ready");
   Serial.println("type: read3e / read1e / readasc / read1c");
+  Serial.println("type: setproto plc / setproto inv / proto");
 }
 
 bool readOnce1C() {
@@ -282,6 +303,13 @@ void loop() {
     } else if (cmd.equalsIgnoreCase("read1c")) {
       Serial.println("ACK read1c");
       readOnce1C();
+    } else if (cmd.equalsIgnoreCase("setproto plc")) {
+      applySerialProfile(MODE_PLC_FX5_1C);
+    } else if (cmd.equalsIgnoreCase("setproto inv")) {
+      applySerialProfile(MODE_INV_FRD820);
+    } else if (cmd.equalsIgnoreCase("proto")) {
+      if (g_mode == MODE_PLC_FX5_1C) Serial.println("proto=plc");
+      else Serial.println("proto=inv");
     }
   }
   delay(5);
