@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <WebServer.h>
 
 // MAX485 control pins
 static const int PIN_RE = 3;   // Receiver Enable (LOW = receive)
@@ -18,16 +20,43 @@ enum ProtoMode {
 
 ProtoMode g_mode = MODE_PLC_FX5_1C;
 
+struct SerialProfile {
+  long baud;
+  String fmt;
+};
+
+SerialProfile g_plcProfile = {9600, "7O1"};
+SerialProfile g_invProfile = {19200, "8E2"};
+
+WebServer g_web(80);
+const char *AP_SSID = "RS485COM";
+
+uint32_t toSerialConfig(const String &fmt) {
+  if (fmt == "7O1") return SERIAL_7O1;
+  if (fmt == "7E1") return SERIAL_7E1;
+  if (fmt == "8N1") return SERIAL_8N1;
+  if (fmt == "8E1") return SERIAL_8E1;
+  if (fmt == "8O1") return SERIAL_8O1;
+  if (fmt == "8E2") return SERIAL_8E2;
+  return SERIAL_8N1;
+}
+
 void applySerialProfile(ProtoMode mode) {
   Serial1.end();
   if (mode == MODE_PLC_FX5_1C) {
-    // PLC profile: MC 1C no-procedure
-    Serial1.begin(9600, SERIAL_7O1, PIN_RX, PIN_TX);
-    Serial.println("profile=plc (9600 7O1)");
+    Serial1.begin(g_plcProfile.baud, toSerialConfig(g_plcProfile.fmt), PIN_RX, PIN_TX);
+    Serial.print("profile=plc (");
+    Serial.print(g_plcProfile.baud);
+    Serial.print(" ");
+    Serial.print(g_plcProfile.fmt);
+    Serial.println(")");
   } else {
-    // Inverter profile: FR-D820 no-procedure
-    Serial1.begin(19200, SERIAL_8E2, PIN_RX, PIN_TX);
-    Serial.println("profile=inv (19200 8E2)");
+    Serial1.begin(g_invProfile.baud, toSerialConfig(g_invProfile.fmt), PIN_RX, PIN_TX);
+    Serial.print("profile=inv (");
+    Serial.print(g_invProfile.baud);
+    Serial.print(" ");
+    Serial.print(g_invProfile.fmt);
+    Serial.println(")");
   }
   g_mode = mode;
 }
@@ -71,6 +100,52 @@ size_t buildReadD2000Frame(uint8_t *out) {
   };
   memcpy(out, frame, sizeof(frame));
   return sizeof(frame);
+}
+
+void setupWebUi() {
+  g_web.on("/", HTTP_GET, []() {
+    String html = R"HTML(
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>RS485COM</title><style>body{font-family:sans-serif;padding:12px}label{display:block;margin-top:8px}input,select,button{font-size:16px;padding:6px;margin-top:4px}</style></head>
+<body><h3>RS485COM</h3>
+<label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
+<label>PLC Baud<input id='plcBaud' type='number'></label>
+<label>PLC Format<select id='plcFmt'><option>7O1</option><option>7E1</option><option>8N1</option><option>8E1</option><option>8O1</option><option>8E2</option></select></label>
+<label>INV Baud<input id='invBaud' type='number'></label>
+<label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
+<button onclick='save()'>Save & Apply</button>
+<pre id='st'></pre>
+<script>
+async function load(){let r=await fetch('/cfg');let j=await r.json();
+mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;st.textContent=JSON.stringify(j,null,2)}
+async function save(){let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
+let r=await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});st.textContent=await r.text();setTimeout(load,300)}
+load();
+</script></body></html>)HTML";
+    g_web.send(200, "text/html", html);
+  });
+
+  g_web.on("/cfg", HTTP_GET, []() {
+    String j = "{";
+    j += "\"mode\":\"" + String(g_mode == MODE_PLC_FX5_1C ? "plc" : "inv") + "\",";
+    j += "\"plcBaud\":" + String(g_plcProfile.baud) + ",";
+    j += "\"plcFmt\":\"" + g_plcProfile.fmt + "\",";
+    j += "\"invBaud\":" + String(g_invProfile.baud) + ",";
+    j += "\"invFmt\":\"" + g_invProfile.fmt + "\"}";
+    g_web.send(200, "application/json", j);
+  });
+
+  g_web.on("/set", HTTP_POST, []() {
+    if (g_web.hasArg("plcBaud")) g_plcProfile.baud = g_web.arg("plcBaud").toInt();
+    if (g_web.hasArg("plcFmt")) g_plcProfile.fmt = g_web.arg("plcFmt");
+    if (g_web.hasArg("invBaud")) g_invProfile.baud = g_web.arg("invBaud").toInt();
+    if (g_web.hasArg("invFmt")) g_invProfile.fmt = g_web.arg("invFmt");
+    if (g_web.hasArg("mode") && g_web.arg("mode") == "inv") applySerialProfile(MODE_INV_FRD820);
+    else applySerialProfile(MODE_PLC_FX5_1C);
+    g_web.send(200, "text/plain", "OK");
+  });
+
+  g_web.begin();
 }
 
 bool readOnce() {
@@ -135,6 +210,12 @@ void setup() {
 
   applySerialProfile(MODE_PLC_FX5_1C);
 
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(AP_SSID); // open AP (no password)
+  setupWebUi();
+  Serial.print("AP up: "); Serial.println(AP_SSID);
+  Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
+
   Serial.println("xiao_c3_rs485_mc ready");
   Serial.println("type: read3e / read1e / readasc / read1c / readinv");
   Serial.println("type: setproto plc / setproto inv / proto");
@@ -145,14 +226,25 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   const uint8_t CR = 0x0D;
   const uint8_t LF = 0x0A;
 
+  auto checksum2 = [&](const String &s) {
+    uint8_t sum = 0;
+    for (size_t i = 0; i < s.length(); i++) sum += (uint8_t)s[i];
+    char c[3];
+    snprintf(c, sizeof(c), "%02X", sum);
+    return String(c);
+  };
+
   auto trySend = [&](const String &body, bool addLF) -> bool {
     while (Serial1.available()) Serial1.read();
+
+    String cks = checksum2(body);
 
     rs485TxMode();
     delayMicroseconds(120);
     Serial1.write(ENQ);
     Serial1.print(body);
-    Serial1.write(CR);
+    Serial1.print(cks);   // checksum required by inverter
+    Serial1.write(CR);    // CR only by default
     if (addLF) Serial1.write(LF);
     Serial1.flush();
     rs485RxMode();
@@ -193,8 +285,7 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
 
   if (trySend(b1, false)) return true;
   if (trySend(b2, false)) return true;
-  if (trySend(b1, true)) return true;
-  if (trySend(b2, true)) return true;
+  // keep CR-only per user setting
   return false;
 }
 
@@ -362,6 +453,7 @@ bool readOnce1E() {
 }
 
 void loop() {
+  g_web.handleClient();
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
