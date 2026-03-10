@@ -30,7 +30,7 @@ const stat = document.getElementById('stat');
 const W=cvs.width,H=cvs.height,GROUND=262;
 
 let t=0,running=false,clear=false,score=0,best=Number(localStorage.bestDashLite||0);
-let speed=3.95,goalX=25000;
+let speed=4.05,goalX=39000;
 const p={x:120,y:GROUND-26,w:24,h:24,vy:0,on:false,rot:0};
 let spikes=[],pads=[],blocks=[],holes=[],ghosts=[],particles=[];
 
@@ -41,37 +41,50 @@ function beat(on){ if(!on){bgm.pause();bgm.currentTime=0;return;} ac.resume(); b
 function beep(freq=130,dur=0.22,vol=0.05,type='sawtooth'){ const o=ac.createOscillator(),g=ac.createGain(); o.type=type;o.frequency.value=freq;g.gain.value=vol;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+dur);o.stop(ac.currentTime+dur+0.01);}
 
 function mkGhosts(){
-  ghosts=[];
-  for(let i=0;i<12;i++) ghosts.push({x:i*190+300,y:40+Math.random()*120,s:0.3+Math.random()*0.7,p:Math.random()*6.28});
+  ghosts=[
+    {x:300,y:70,s:0.5,p:0.3},{x:520,y:120,s:0.7,p:1.1},{x:760,y:55,s:0.45,p:2.0},
+    {x:980,y:140,s:0.6,p:2.6},{x:1220,y:80,s:0.8,p:3.4},{x:1460,y:110,s:0.55,p:4.1},
+    {x:1700,y:65,s:0.65,p:5.0},{x:1940,y:125,s:0.5,p:5.6},{x:2180,y:90,s:0.75,p:0.9}
+  ];
 }
 function reset(){
-  t=0;score=0;clear=false;speed=3.95;goalX=25000;
+  t=0;score=0;clear=false;speed=4.05;goalX=39000;
   p.y=GROUND-p.h; p.vy=0; p.on=true; p.rot=0;
   spikes=[];pads=[];blocks=[];holes=[];particles=[];
   mkGhosts();
 
-  // rhythm-ish placement (roughly 1 beat ~= 90px at this speed)
-  let x=620;
-  while(x<goalX-600){
-    const r=Math.random();
-    if(r<0.25){ // single spike
-      spikes.push({x,w:26,h:26}); x+=95;
-    }else if(r<0.42){ // double spike jump
-      spikes.push({x,w:50,h:24,double:true}); x+=130;
-    }else if(r<0.58){ // pit jump
-      holes.push({x,w:55+Math.random()*55}); x+=160;
-    }else if(r<0.76){ // block to jump onto
-      blocks.push({x,w:42,h:22+Math.random()*24});
-      spikes.push({x:x+58,w:22,h:20});
-      x+=170;
-    }else if(r<0.9){ // bounce pad section
-      pads.push({x,w:32});
-      spikes.push({x:x+70,w:24,h:22});
-      x+=150;
-    }else{ // rest
-      x+=85;
-    }
-  }
+  // Fixed handcrafted stage (no random).
+  holes.push(
+    {x:1900,w:80},{x:4300,w:95},{x:7200,w:90},{x:10300,w:85},
+    {x:13600,w:95},{x:16700,w:90},{x:19900,w:100},{x:22800,w:90},
+    {x:26200,w:95},{x:29150,w:90},{x:32300,w:100},{x:35600,w:90}
+  );
+
+  blocks.push(
+    {x:2800,w:54,h:34},{x:5400,w:60,h:30},{x:8600,w:58,h:36},
+    {x:11800,w:64,h:32},{x:15100,w:60,h:34},{x:18300,w:62,h:30},
+    {x:21400,w:58,h:36},{x:24600,w:62,h:34},{x:27600,w:58,h:32},
+    {x:30800,w:66,h:30},{x:33800,w:60,h:35},{x:37100,w:58,h:34}
+  );
+
+  pads.push(
+    {x:3600,w:34},{x:9300,w:34},{x:16050,w:34},{x:22050,w:34},
+    {x:25550,w:34},{x:28600,w:34},{x:31750,w:34},{x:35050,w:34}
+  );
+
+  spikes.push(
+    {x:760,w:26,h:24},{x:980,w:26,h:26},{x:1240,w:50,h:24,double:true},
+    {x:1660,w:26,h:24},{x:2360,w:26,h:24},{x:3020,w:26,h:24},{x:3330,w:50,h:24,double:true},
+    {x:4780,w:26,h:26},{x:5740,w:26,h:22},{x:6120,w:50,h:24,double:true},
+    {x:8030,w:26,h:24},{x:8420,w:26,h:22},{x:8880,w:26,h:24},{x:9700,w:50,h:24,double:true},
+    {x:11150,w:26,h:24},{x:11720,w:26,h:22},{x:12480,w:26,h:26},{x:13120,w:50,h:24,double:true},
+    {x:14500,w:26,h:24},{x:15580,w:26,h:24},{x:17280,w:50,h:24,double:true},
+    {x:18980,w:26,h:24},{x:19720,w:26,h:24},{x:20550,w:26,h:24},{x:21720,w:50,h:24,double:true},
+    {x:23600,w:26,h:24},{x:24300,w:26,h:24},{x:25220,w:26,h:24},{x:27050,w:50,h:24,double:true},
+    {x:28380,w:26,h:24},{x:29920,w:26,h:22},{x:31250,w:50,h:24,double:true},
+    {x:32980,w:26,h:24},{x:34420,w:26,h:24},{x:36100,w:50,h:24,double:true},
+    {x:37750,w:26,h:24},{x:38500,w:26,h:24}
+  );
 }
 
 function jump(){ if(running && p.on){ p.vy=-10.5; p.on=false; } }
@@ -135,15 +148,31 @@ function tri(x,y,w,h){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-h);ctx.
 function draw(){
   ctx.clearRect(0,0,W,H);
 
-  // ghostly sky layers
+  // ghostly sky layers (skeletal vibe)
   const grad=ctx.createLinearGradient(0,0,0,H);
-  grad.addColorStop(0,'#17192c'); grad.addColorStop(1,'#0a0d18');
+  grad.addColorStop(0,'#1a1630'); grad.addColorStop(0.55,'#11152a'); grad.addColorStop(1,'#080b14');
   ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle=`rgba(149,120,255,${0.05+0.04*Math.sin(t*0.02)})`;
-  for(let i=0;i<16;i++) ctx.fillRect((i*90-(t*1.5)%90),0,42,H);
+  ctx.fillStyle=`rgba(166,118,255,${0.06+0.05*Math.sin(t*0.02)})`;
+  for(let i=0;i<18;i++) ctx.fillRect((i*80-(t*1.8)%80),0,32,H);
 
-  // moon
+  // distant ruins
+  ctx.fillStyle='rgba(70,75,110,0.35)';
+  for(let i=0;i<8;i++){
+    const x=(i*150-(t*0.7)%150);
+    ctx.fillRect(x,180,34,90);
+    ctx.fillRect(x+42,160,18,110);
+  }
+
+  // drifting mist
+  ctx.fillStyle='rgba(190,210,255,0.08)';
+  for(let i=0;i<5;i++){
+    const x=(i*240-(t*1.1)%240)-40;
+    ctx.beginPath(); ctx.ellipse(x,220+Math.sin((t+i*40)*0.01)*8,120,28,0,0,Math.PI*2); ctx.fill();
+  }
+
+  // moon + occasional flash
   ctx.fillStyle='rgba(215,230,255,0.18)'; ctx.beginPath(); ctx.arc(820,60,40,0,Math.PI*2); ctx.fill();
+  if((t%900)>870){ ctx.fillStyle='rgba(200,230,255,0.12)'; ctx.fillRect(0,0,W,H);} 
 
   // ghosts
   ghosts.forEach(g=>{
