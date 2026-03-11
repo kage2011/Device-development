@@ -481,7 +481,7 @@ function renderAlarms(){
   alarms.innerHTML = lastAlarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:${expandedAlarm[i]?'block':'none'};margin-top:4px'>${a.detail}</div></div>`).join('');
 }
 function renderInv(j, updateAlarms){
-  invKpi.innerHTML = `<div class='kpi'>Hz: ${j.freqHz}</div><div class='kpi'>A: ${j.currentA}</div><div class='kpi'>V: ${j.voltageV}</div><div class='kpi'>${j.statusHex}</div>`;
+  invKpi.innerHTML = `<div class='kpi'>Hz: ${j.freqHz}</div><div class='kpi'>I: ${j.currentA}</div><div class='kpi'>V: ${j.voltageV}</div><div class='kpi'>St: ${j.statusHex}</div>`;
   invStatus.innerHTML = `<div class='grid'>`
     + bitCell('RUN',j.status.run)
     + bitCell('FWD',j.status.fwd)
