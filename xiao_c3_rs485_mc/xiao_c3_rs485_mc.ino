@@ -276,19 +276,29 @@ async function readPlcNow(){
 
 function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
 function pushHist(arr,v){ if(v>=0){arr.push(v); if(arr.length>120) arr.shift();} }
-function drawLines(cv, series, colors, minY, maxY){
+function drawLines(cv, series, colors, minY, maxY, padL=34, padR=12){
   const ctx=cv.getContext('2d'); const w=cv.width,h=cv.height;
   ctx.clearRect(0,0,w,h); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
-  ctx.strokeStyle='#e9edf7'; for(let i=1;i<5;i++){const y=i*h/5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();}
+  const plotW=w-padL-padR, plotH=h-24;
+  ctx.strokeStyle='#e9edf7';
+  for(let i=0;i<=4;i++){const y=8+i*plotH/4; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();}
   series.forEach((arr,idx)=>{
     if(arr.length<2) return;
     ctx.strokeStyle=colors[idx]; ctx.lineWidth=2; ctx.beginPath();
     for(let i=0;i<arr.length;i++){
-      const x=i*(w-8)/(Math.max(1,arr.length-1))+4;
-      const y=h-((arr[i]-minY)/(Math.max(0.0001,maxY-minY)))*(h-12)-6;
+      const x=padL+i*plotW/(Math.max(1,arr.length-1));
+      const y=8+plotH-( (arr[i]-minY)/(Math.max(0.0001,maxY-minY)) )*plotH;
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
     ctx.stroke();
+  });
+}
+function drawLegend(ctx, items, x, y){
+  ctx.font='12px sans-serif';
+  items.forEach((it,idx)=>{
+    const yy=y+idx*14;
+    ctx.fillStyle=it.c; ctx.fillRect(x,yy-8,10,10);
+    ctx.fillStyle='#334'; ctx.fillText(it.t,x+14,yy);
   });
 }
 function drawInvCharts(){
@@ -298,11 +308,22 @@ function drawInvCharts(){
   const hzMin=Math.min(...hzHist,0), hzMax=Math.max(...hzHist,1);
   const vMin=Math.min(...vHist,0), vMax=Math.max(...vHist,1);
   const cMin=Math.min(...aHist,0), cMax=Math.max(...aHist,1);
-  // Normalize Hz+V on one chart by mapping each to 0..1 then drawing
+
   const hzN=hzHist.map(v=>(v-hzMin)/Math.max(0.0001,hzMax-hzMin));
   const vN=vHist.map(v=>(v-vMin)/Math.max(0.0001,vMax-vMin));
-  drawLines(hzv,[hzN,vN],['#2e7dff','#ff6d00'],0,1);
-  drawLines(cur,[aHist],['#26a69a'],cMin,cMax);
+  drawLines(hzv,[hzN,vN],['#2e7dff','#ff6d00'],0,1,40,40);
+  let c1=hzv.getContext('2d');
+  c1.fillStyle='#2e7dff'; c1.font='12px sans-serif';
+  c1.fillText(`${hzMax.toFixed(1)} Hz`,4,16); c1.fillText(`${hzMin.toFixed(1)} Hz`,4,hzv.height-6);
+  c1.fillStyle='#ff6d00';
+  c1.fillText(`${vMax.toFixed(1)} V`,hzv.width-38,16); c1.fillText(`${vMin.toFixed(1)} V`,hzv.width-38,hzv.height-6);
+  drawLegend(c1,[{t:'Freq(Hz)',c:'#2e7dff'},{t:'Volt(V)',c:'#ff6d00'}],hzv.width-120,34);
+
+  drawLines(cur,[aHist],['#26a69a'],cMin,cMax,40,12);
+  let c2=cur.getContext('2d');
+  c2.fillStyle='#26a69a'; c2.font='12px sans-serif';
+  c2.fillText(`${cMax.toFixed(2)} A`,4,16); c2.fillText(`${cMin.toFixed(2)} A`,4,cur.height-6);
+  drawLegend(c2,[{t:'Current(A)',c:'#26a69a'}],cur.width-120,20);
 }
 function renderAlarms(){
   alarms.innerHTML = lastAlarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:${expandedAlarm[i]?'block':'none'};margin-top:4px'>${a.detail}</div></div>`).join('');
