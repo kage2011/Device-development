@@ -182,10 +182,14 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <body><h3>RS485COM</h3>
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
+<div id='plcCfg'>
 <label>PLC Baud<input id='plcBaud' type='number'></label>
 <label>PLC Format<select id='plcFmt'><option>7O1</option><option>7E1</option><option>8N1</option><option>8E1</option><option>8O1</option><option>8E2</option></select></label>
+</div>
+<div id='invCfg'>
 <label>INV Baud<input id='invBaud' type='number'></label>
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
+</div>
 <button onclick='save()'>Save & Apply</button>
 </div>
 
@@ -199,21 +203,27 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 
 <div class='card' id='invCard'>
 <h4>INV Dashboard</h4>
+<button onclick='readInvNow()'>Read INV</button>
+<div id='invDash' style='display:none'>
 <div id='invKpi'></div>
 <div id='invStatus'></div>
 <h5>Alarm History (名称のみ / クリックで詳細)</h5>
 <div id='alarms'></div>
-<button onclick='readInvNow()'>Read INV</button>
+</div>
 </div>
 <pre id='st'></pre>
 
 <script>
 let timer=null;
+let invActive=false;
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 function updateModePanels(){
   const isInv = mode.value==='inv';
   plcCard.style.display = isInv ? 'none' : 'block';
   invCard.style.display = isInv ? 'block' : 'none';
+  plcCfg.style.display = isInv ? 'none' : 'block';
+  invCfg.style.display = isInv ? 'block' : 'none';
+  if(!isInv){ invActive=false; invDash.style.display='none'; }
 }
 
 async function load(){
@@ -258,16 +268,20 @@ function renderInv(j){
 }
 function toggleDetail(i){const e=document.getElementById('d'+i); if(e) e.style.display=(e.style.display==='none')?'block':'none';}
 
-async function readInvNow(){let r=await fetch('/invread'); let j=await r.json(); renderInv(j);}
+async function readInvNow(){
+  invActive=true;
+  invDash.style.display='block';
+  let r=await fetch('/invread'); let j=await r.json(); renderInv(j);
+}
 
 function startPolling(){
   if(timer) clearInterval(timer);
   timer = setInterval(async ()=>{
     try{
       if(mode.value==='plc') await readPlcNow();
-      else await readInvNow();
+      else if(invActive) await readInvNow();
     }catch(e){}
-  }, 2000);
+  }, 800);
 }
 
 mode.addEventListener('change',()=>{ updateModePanels(); startPolling(); });
