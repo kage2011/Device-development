@@ -348,14 +348,8 @@ function openInvPage(){
 async function save(){
   const m = $('mode').value;
   let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invFmt:$('invFmt').value});
-  if(m==='inv') openInvPage();
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  if(m==='inv') {
-    setTimeout(()=>{ readInvNow(); }, 80);
-  } else {
-    await readPlcNow();
-    $('plcCard').scrollIntoView({behavior:'smooth', block:'start'});
-  }
+  updateModePanels();
 }
 
 async function savePlc(){
