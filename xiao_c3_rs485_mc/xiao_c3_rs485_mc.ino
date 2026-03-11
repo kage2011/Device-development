@@ -221,6 +221,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 
 <script>
 let timer=null;
+let pollBusy=false;
 let invActive=false;
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 function updateModePanels(){
@@ -292,11 +293,14 @@ async function readInvNow(){
 function startPolling(){
   if(timer) clearInterval(timer);
   timer = setInterval(async ()=>{
+    if(pollBusy) return;
+    pollBusy = true;
     try{
       if(mode.value==='plc') await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
-  }, 800);
+    finally{ pollBusy = false; }
+  }, 1000);
 }
 
 mode.addEventListener('change',()=>{ updateModePanels(); startPolling(); });
@@ -518,9 +522,9 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   String b2 = String("00") + cmd2 + "0";
 
   for (int r = 0; r < 2; r++) {
-    if (trySend(b1, false, 40)) return true;
-    if (trySend(b2, false, 40)) return true;
-    delay(2);
+    if (trySend(b1, false, 120)) return true;
+    if (trySend(b2, false, 120)) return true;
+    delay(3);
   }
   // keep CR-only per user setting
   return false;
