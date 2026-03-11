@@ -408,6 +408,7 @@ async function save(){
   let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invFmt:$('invFmt').value});
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   updateModePanels();
+  alert('保存されました');
 }
 
 async function savePlc(){
