@@ -285,7 +285,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 </div>
 
 <div id='fabWrap'>
-  <div class='card small'>端末時刻: <span id='phoneTime'>-</span><br>デバイス時刻: <span id='devTime'>-</span></div>
+  <div class='card small'>デバイス時刻: <span id='devTime'>-</span></div>
   <button class='fab' onclick='syncTime()'>時刻同期</button>
   <button class='fab' onclick='openSaveSettings()'>保存設定</button>
   <div id='savePanel' class='card' style='display:none;min-width:240px'>
@@ -462,7 +462,6 @@ async function syncTime(){
   await refreshDeviceTime();
 }
 
-function tickPhoneTime(){ $('phoneTime').textContent = new Date().toLocaleString(); }
 async function refreshDeviceTime(){
   try { let r=await fetch('/time'); let j=await r.json(); $('devTime').textContent = j.now || '-'; } catch(e){}
 }
@@ -500,7 +499,6 @@ function startPolling(){
 }
 
 $('mode').addEventListener('change',()=>{ updateModePanels(); startPolling(); });
-setInterval(tickPhoneTime, 1000); tickPhoneTime();
 setInterval(refreshDeviceTime, 2000); refreshDeviceTime();
 load();
 </script></body></html>)HTML";
