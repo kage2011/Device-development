@@ -411,7 +411,7 @@ bool readOnce() {
   uint8_t res[128];
   size_t n = 0;
   unsigned long t0 = millis();
-  while (millis() - t0 < 500) {
+  while (millis() - t0 < 10) {
     while (Serial1.available() && n < sizeof(res)) {
       res[n++] = (uint8_t)Serial1.read();
     }
