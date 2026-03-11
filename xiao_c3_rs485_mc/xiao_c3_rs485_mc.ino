@@ -402,10 +402,10 @@ bool readOnce() {
   while (Serial1.available()) Serial1.read();
 
   rs485TxMode();
-  delayMicroseconds(100);
+  delay(10);
   Serial1.write(req, reqLen);
   Serial1.flush();
-  delayMicroseconds(150);
+  delay(10);
   rs485RxMode();
 
   uint8_t res[128];
