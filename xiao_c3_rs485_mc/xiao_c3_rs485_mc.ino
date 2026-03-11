@@ -489,24 +489,32 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   };
 
   auto trySend = [&](const String &body, bool addLF, uint16_t timeoutMs) -> bool {
+    // clear stale RX before each transaction
     while (Serial1.available()) Serial1.read();
 
     String cks = checksum2(body);
 
     rs485TxMode();
-    delayMicroseconds(120);
+    delay(10);
     Serial1.write(ENQ);
     Serial1.print(body);
     Serial1.print(cks);   // checksum required by inverter
     Serial1.write(CR);    // CR only by default
     if (addLF) Serial1.write(LF);
     Serial1.flush();
+    delay(10);
     rs485RxMode();
 
     uint8_t raw[96]; size_t n = 0;
     unsigned long t0 = millis();
+    bool hasStx = false;
     while (millis() - t0 < timeoutMs && n < sizeof(raw)) {
-      if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
+      if (Serial1.available()) {
+        uint8_t c = (uint8_t)Serial1.read();
+        raw[n++] = c;
+        if (c == 0x02) hasStx = true;
+        if (hasStx && c == 0x03) break;
+      }
     }
 
     Serial.print("INV tx body="); Serial.print(body);
