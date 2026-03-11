@@ -290,9 +290,11 @@ button{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin-top:8px;max-width:100%}
 .cell{border:1px solid #334155;border-radius:8px;padding:8px;text-align:center;background:#0b1220;min-width:0}
 .cell .n{font-size:12px;color:#93c5fd;display:block;margin-bottom:4px}
-.cell .v{font-weight:700}
-.cell.on{background:#d8f8df;border-color:#98d9a8}
-.cell.off{background:#eceff3;border-color:#c5cbd5}
+.cell .v{font-weight:800;font-size:15px;letter-spacing:.3px}
+.cell.on{background:#14532d;border-color:#22c55e;color:#dcfce7}
+.cell.on .v{color:#86efac}
+.cell.off{background:#1f2937;border-color:#6b7280;color:#e5e7eb}
+.cell.off .v{color:#f3f4f6}
 canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border-radius:8px;margin:6px 0}
 </style></head>
 <body><h3>RS485COM <span class='small'>v20260311b</span></h3>
