@@ -534,11 +534,9 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   };
 
   // command read patterns: station + cmd (+ optional wait)
-  String b1 = String("00") + cmd2;
   String b2 = String("00") + cmd2 + "0";
 
   for (int r = 0; r < 3; r++) {
-    if (trySend(b1, false, 250)) return true;
     if (trySend(b2, false, 250)) return true;
     delay(5);
   }
