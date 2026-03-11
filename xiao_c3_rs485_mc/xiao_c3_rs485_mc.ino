@@ -229,7 +229,7 @@ button{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff
 .cell.off{background:#eceff3;border-color:#c5cbd5}
 canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border-radius:8px;margin:6px 0}
 </style></head>
-<body><h3>RS485COM</h3>
+<body><h3>RS485COM <span class='small'>v20260311b</span></h3>
 <div id='mainPage'>
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
@@ -303,43 +303,45 @@ let invActive=false;
 let hzHist=[], vHist=[], aHist=[];
 let lastAlarms=[];
 let expandedAlarm={};
+const $ = (id)=>document.getElementById(id);
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 function updateModePanels(){
-  const isInv = mode.value==='inv';
-  plcCard.style.display = isInv ? 'none' : 'block';
-  plcCfg.style.display = isInv ? 'none' : 'block';
-  invCfg.style.display = isInv ? 'block' : 'none';
-  if(!isInv){ invActive=false; invDash.style.display='none'; invCard.style.display='none'; mainPage.style.display='block'; }
+  const isInv = $('mode').value==='inv';
+  $('plcCard').style.display = isInv ? 'none' : 'block';
+  $('plcCfg').style.display = isInv ? 'none' : 'block';
+  $('invCfg').style.display = isInv ? 'block' : 'none';
+  if(!isInv){ invActive=false; $('invDash').style.display='none'; $('invCard').style.display='none'; $('mainPage').style.display='block'; }
 }
 function backToMain(){
-  invCard.style.display='none';
-  mainPage.style.display='block';
+  $('invCard').style.display='none';
+  $('mainPage').style.display='block';
 }
 
 async function load(){
   let r=await fetch('/cfg');let j=await r.json();
-  mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;
-  let pr=await fetch('/plccfg'); let pj=await pr.json(); plcItems.innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
+  $('mode').value=j.mode; $('plcBaud').value=String(j.plcBaud); $('plcFmt').value=j.plcFmt; $('invBaud').value=String(j.invBaud); $('invFmt').value=j.invFmt;
+  let pr=await fetch('/plccfg'); let pj=await pr.json(); $('plcItems').innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
   updateModePanels();
   startPolling();
 }
 
 function openInvPage(){
   invActive=true;
-  mainPage.style.display='none';
-  invCard.style.display='block';
-  invDash.style.display='block';
+  $('mainPage').style.display='none';
+  $('invCard').style.display='block';
+  $('invDash').style.display='block';
 }
 
 async function save(){
-  let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
-  if(mode.value==='inv') openInvPage();
+  const m = $('mode').value;
+  let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invFmt:$('invFmt').value});
+  if(m==='inv') openInvPage();
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  if(mode.value==='inv') {
+  if(m==='inv') {
     setTimeout(()=>{ readInvNow(); }, 80);
   } else {
     await readPlcNow();
-    plcCard.scrollIntoView({behavior:'smooth', block:'start'});
+    $('plcCard').scrollIntoView({behavior:'smooth', block:'start'});
   }
 }
 
@@ -356,7 +358,7 @@ async function savePlc(){
 
 async function readPlcNow(){
   let r=await fetch('/plcread'); let j=await r.json();
-  plcOut.textContent = j.items.map(it=>`#${it.idx+1} D${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
+  $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} D${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
 }
 
 function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
@@ -450,17 +452,17 @@ async function syncTime(){
 }
 
 function openSaveSettings(){
-  savePanel.style.display='block';
+  $('savePanel').style.display='block';
 }
 function closeSaveSettings(){
-  savePanel.style.display='none';
+  $('savePanel').style.display='none';
 }
 async function saveLogSettings(){
   let p = new URLSearchParams({
-    enabled: logEnable.checked?'1':'0',
-    intervalMs: logInterval.value,
-    filename: logFile.value || '',
-    target: mode.value
+    enabled: $('logEnable').checked?'1':'0',
+    intervalMs: $('logInterval').value,
+    filename: $('logFile').value || '',
+    target: $('mode').value
   });
   await fetch('/logcfg',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   closeSaveSettings();
@@ -472,14 +474,14 @@ function startPolling(){
     if(pollBusy) return;
     pollBusy = true;
     try{
-      if(mode.value==='plc') await readPlcNow();
+      if($('mode').value==='plc') await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; }
   }, 100);
 }
 
-mode.addEventListener('change',()=>{ updateModePanels(); startPolling(); });
+$('mode').addEventListener('change',()=>{ updateModePanels(); startPolling(); });
 load();
 </script></body></html>)HTML";
     g_web.send(200, "text/html", html);
