@@ -4,6 +4,7 @@
 #include <Wire.h>
 #include <RTClib.h>
 #include <SD.h>
+#include <SPIFFS.h>
 
 // MAX485 control pins
 static const int PIN_RE = 3;   // Receiver Enable (LOW = receive)
@@ -63,6 +64,59 @@ LogConfig g_logCfg = {false, 1000, "", "inv", 0};
 String g_logPath = "";
 uint32_t g_plcLastU32[5] = {0,0,0,0,0};
 bool g_plcLastOk[5] = {false,false,false,false,false};
+
+void saveRuntimeConfig() {
+  File f = SPIFFS.open("/runtime_cfg.txt", FILE_WRITE);
+  if (!f) return;
+  f.println(String("mode=") + (g_mode == MODE_INV_FRD820 ? "inv" : "plc"));
+  f.println(String("plcBaud=") + g_plcProfile.baud);
+  f.println(String("plcFmt=") + g_plcProfile.fmt);
+  f.println(String("invBaud=") + g_invProfile.baud);
+  f.println(String("invFmt=") + g_invProfile.fmt);
+  for (int i=0;i<5;i++) {
+    f.println(String("plc")+i+"_addr="+g_plcItems[i].addr);
+    f.println(String("plc")+i+"_view="+g_plcItems[i].view);
+    f.println(String("plc")+i+"_width="+g_plcItems[i].width);
+    f.println(String("plc")+i+"_sign="+(g_plcItems[i].sign?1:0));
+  }
+  f.println(String("logEnabled=") + (g_logCfg.enabled?1:0));
+  f.println(String("logIntervalMs=") + g_logCfg.intervalMs);
+  f.println(String("logFilename=") + g_logCfg.filename);
+  f.println(String("logTarget=") + g_logCfg.target);
+  f.close();
+}
+
+void loadRuntimeConfig() {
+  if (!SPIFFS.exists("/runtime_cfg.txt")) return;
+  File f = SPIFFS.open("/runtime_cfg.txt", FILE_READ);
+  if (!f) return;
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    line.trim();
+    int p = line.indexOf('=');
+    if (p <= 0) continue;
+    String k = line.substring(0,p);
+    String v = line.substring(p+1);
+    if (k == "mode") g_mode = (v == "inv") ? MODE_INV_FRD820 : MODE_PLC_FX5_1C;
+    else if (k == "plcBaud") g_plcProfile.baud = v.toInt();
+    else if (k == "plcFmt") g_plcProfile.fmt = v;
+    else if (k == "invBaud") g_invProfile.baud = v.toInt();
+    else if (k == "invFmt") g_invProfile.fmt = v;
+    else if (k == "logEnabled") g_logCfg.enabled = (v.toInt() == 1);
+    else if (k == "logIntervalMs") g_logCfg.intervalMs = (uint32_t) v.toInt();
+    else if (k == "logFilename") g_logCfg.filename = v;
+    else if (k == "logTarget") g_logCfg.target = v;
+    else {
+      for (int i=0;i<5;i++) {
+        if (k == String("plc")+i+"_addr") g_plcItems[i].addr = (uint16_t)v.toInt();
+        else if (k == String("plc")+i+"_view") g_plcItems[i].view = v;
+        else if (k == String("plc")+i+"_width") g_plcItems[i].width = (uint8_t)v.toInt();
+        else if (k == String("plc")+i+"_sign") g_plcItems[i].sign = (v.toInt() == 1);
+      }
+    }
+  }
+  f.close();
+}
 
 uint32_t toSerialConfig(const String &fmt) {
   if (fmt == "7O1") return SERIAL_7O1;
@@ -213,6 +267,8 @@ bool plcReadWords1C(uint16_t dAddr, uint8_t words, uint32_t &u32out) {
   }
   return false;
 }
+
+void maybeWriteCsvLog();
 
 void setupWebUi() {
   g_web.on("/", HTTP_GET, []() {
@@ -522,6 +578,7 @@ load();
     if (g_web.hasArg("invFmt")) g_invProfile.fmt = g_web.arg("invFmt");
     if (g_web.hasArg("mode") && g_web.arg("mode") == "inv") applySerialProfile(MODE_INV_FRD820);
     else applySerialProfile(MODE_PLC_FX5_1C);
+    saveRuntimeConfig();
     g_web.send(200, "text/plain", "OK");
   });
 
@@ -559,6 +616,7 @@ load();
       g_logCfg.lastWriteMs = millis() - g_logCfg.intervalMs; // start immediately
       maybeWriteCsvLog();
     }
+    saveRuntimeConfig();
     String j = String("{\"ok\":true,\"enabled\":") + (g_logCfg.enabled?"true":"false")
              + ",\"intervalMs\":" + String(g_logCfg.intervalMs)
              + ",\"target\":\"" + g_logCfg.target + "\""
@@ -596,6 +654,7 @@ load();
       if (g_web.hasArg(kW)) g_plcItems[i].width = (uint8_t)g_web.arg(kW).toInt();
       if (g_web.hasArg(kS)) g_plcItems[i].sign = (g_web.arg(kS) == "1");
     }
+    saveRuntimeConfig();
     g_web.send(200, "text/plain", "OK");
   });
 
@@ -696,7 +755,9 @@ void setup() {
   pinMode(PIN_DE, OUTPUT);
   rs485RxMode();
 
-  applySerialProfile(MODE_PLC_FX5_1C);
+  SPIFFS.begin(true);
+  loadRuntimeConfig();
+  applySerialProfile(g_mode);
   Wire.begin();
   if (!rtc.begin()) {
     Serial.println("RTC NG");
