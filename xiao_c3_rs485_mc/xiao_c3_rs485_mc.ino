@@ -306,7 +306,7 @@ function startPolling(){
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; }
-  }, 1000);
+  }, 700);
 }
 
 mode.addEventListener('change',()=>{ updateModePanels(); startPolling(); });
