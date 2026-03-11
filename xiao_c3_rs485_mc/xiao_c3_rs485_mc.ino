@@ -537,10 +537,10 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   String b1 = String("00") + cmd2;
   String b2 = String("00") + cmd2 + "0";
 
-  for (int r = 0; r < 3; r++) {
-    if (trySend(b1, false, 250)) return true;
-    if (trySend(b2, false, 250)) return true;
-    delay(5);
+  for (int r = 0; r < 2; r++) {
+    if (trySend(b1, false, 120)) return true;
+    if (trySend(b2, false, 120)) return true;
+    delay(3);
   }
   // keep CR-only per user setting
   return false;
@@ -599,12 +599,14 @@ void refreshInvAlarms() {
 }
 
 String buildInvReadJson() {
-  // round-robin: one fast register per request (stability first)
-  if (g_fastIdx == 0) g_fok  = readInverterOnce("6F", g_f);
-  else if (g_fastIdx == 1) g_iok  = readInverterOnce("70", g_i);
-  else if (g_fastIdx == 2) g_vok  = readInverterOnce("71", g_v);
+  // Prioritize frequency every cycle to keep main KPI responsive
+  g_fok = readInverterOnce("6F", g_f);
+
+  // round-robin for the rest
+  if (g_fastIdx == 0) g_iok  = readInverterOnce("70", g_i);
+  else if (g_fastIdx == 1) g_vok  = readInverterOnce("71", g_v);
   else g_stok = readInverterOnce("79", g_st);
-  g_fastIdx = (g_fastIdx + 1) % 4;
+  g_fastIdx = (g_fastIdx + 1) % 3;
 
   // Alarm/history: read only once at first, then on-demand button
   if (!g_alarmInitialized) refreshInvAlarms();
