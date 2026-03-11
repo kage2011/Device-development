@@ -252,6 +252,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
 </div>
 <button onclick='save()'>Save & Apply</button>
+<button onclick='readInvNow()'>Read INV</button>
 </div>
 
 <div class='card' id='plcCard'>
