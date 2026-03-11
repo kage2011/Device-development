@@ -32,7 +32,7 @@ SerialProfile g_plcProfile = {9600, "7O1"};
 SerialProfile g_invProfile = {19200, "8E2"};
 
 WebServer g_web(80);
-const char *AP_SSID = "RS485COM_V2";
+const char *AP_SSID = "RS485COM_X91";
 RTC_DS3231 rtc;
 const int SD_CS_PIN = 5;
 
@@ -668,6 +668,7 @@ void setup() {
   Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
 
   Serial.println("xiao_c3_rs485_mc ready");
+  Serial.println("BUILD_TAG=X91");
   Serial.println("type: read3e / read1e / readasc / read1c / readinv");
   Serial.println("type: setproto plc / setproto inv / proto");
 }
