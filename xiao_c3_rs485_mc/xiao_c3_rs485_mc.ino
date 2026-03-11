@@ -32,7 +32,7 @@ SerialProfile g_plcProfile = {9600, "7O1"};
 SerialProfile g_invProfile = {19200, "8E2"};
 
 WebServer g_web(80);
-const char *AP_SSID = "RS485COM";
+const char *AP_SSID = "RS485COM_V2";
 RTC_DS3231 rtc;
 const int SD_CS_PIN = 5;
 
