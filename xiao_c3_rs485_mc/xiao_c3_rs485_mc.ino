@@ -61,6 +61,8 @@ struct LogConfig {
 
 LogConfig g_logCfg = {false, 1000, "", "inv", 0};
 String g_logPath = "";
+uint32_t g_plcLastU32[5] = {0,0,0,0,0};
+bool g_plcLastOk[5] = {false,false,false,false,false};
 
 uint32_t toSerialConfig(const String &fmt) {
   if (fmt == "7O1") return SERIAL_7O1;
@@ -89,8 +91,13 @@ void ensureLogFile() {
     g_logPath = "/sd/" + base;
     File f = SD.open(g_logPath, FILE_WRITE);
     if (f) {
-      if (g_logCfg.target == "inv") f.println("ts,freq_hz,current_a,voltage_v,status_hex");
-      else f.println("ts,target,note");
+      if (g_logCfg.target == "inv") {
+        f.println("ts,freq_hz,current_a,voltage_v,status_hex");
+      } else {
+        f.print("ts");
+        for (int i=0;i<5;i++) { f.print(",D"); f.print(g_plcItems[i].addr); }
+        f.println();
+      }
       f.close();
     }
   }
@@ -274,6 +281,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 </div>
 
 <div id='fabWrap'>
+  <div class='card small'>端末時刻: <span id='phoneTime'>-</span><br>デバイス時刻: <span id='devTime'>-</span></div>
   <button class='fab' onclick='syncTime()'>時刻同期</button>
   <button class='fab' onclick='openSaveSettings()'>保存設定</button>
   <div id='savePanel' class='card' style='display:none;min-width:240px'>
@@ -313,6 +321,7 @@ function updateModePanels(){
   if(!isInv){ invActive=false; $('invDash').style.display='none'; $('invCard').style.display='none'; $('mainPage').style.display='block'; }
 }
 function backToMain(){
+  invActive=false;
   $('invCard').style.display='none';
   $('mainPage').style.display='block';
 }
@@ -448,7 +457,15 @@ async function readInvAlarms(){
 async function syncTime(){
   const epoch = Math.floor(Date.now()/1000);
   let p = new URLSearchParams({epoch:String(epoch)});
-  await fetch('/timesync',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  let r = await fetch('/timesync',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  let j = await r.json();
+  alert(j && j.rtc ? '時刻同期完了' : '時刻同期失敗');
+  await refreshDeviceTime();
+}
+
+function tickPhoneTime(){ $('phoneTime').textContent = new Date().toLocaleString(); }
+async function refreshDeviceTime(){
+  try { let r=await fetch('/time'); let j=await r.json(); $('devTime').textContent = j.now || '-'; } catch(e){}
 }
 
 function openSaveSettings(){
@@ -482,6 +499,8 @@ function startPolling(){
 }
 
 $('mode').addEventListener('change',()=>{ updateModePanels(); startPolling(); });
+setInterval(tickPhoneTime, 1000); tickPhoneTime();
+setInterval(refreshDeviceTime, 2000); refreshDeviceTime();
 load();
 </script></body></html>)HTML";
     g_web.send(200, "text/html", html);
@@ -513,6 +532,13 @@ load();
     bool rtcOk = rtc.begin();
     if (rtcOk) rtc.adjust(DateTime(ep));
     g_web.send(200, "application/json", String("{\"ok\":true,\"rtc\":") + (rtcOk ? "true" : "false") + "}");
+  });
+
+  g_web.on("/time", HTTP_GET, []() {
+    DateTime dt = rtc.now();
+    char b[32];
+    snprintf(b, sizeof(b), "%04d-%02d-%02d %02d:%02d:%02d", dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
+    g_web.send(200, "application/json", String("{\"now\":\"") + b + "\"}");
   });
 
   g_web.on("/logcfg", HTTP_POST, []() {
@@ -562,6 +588,8 @@ load();
       uint32_t u = 0;
       uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
       bool ok = plcReadWords1C(g_plcItems[i].addr, words, u);
+      g_plcLastOk[i] = ok;
+      g_plcLastU32[i] = u;
       if (i) j += ",";
       j += "{\"idx\":" + String(i)
         + ",\"addr\":" + String(g_plcItems[i].addr)
@@ -829,7 +857,13 @@ void maybeWriteCsvLog() {
     f.print(g_vok ? (g_v / 10.0f) : -1); f.print(",");
     f.println(hx);
   } else {
-    f.print(ts); f.println(",plc,not_implemented");
+    // PLC: save currently acquired configured addresses
+    f.print(ts);
+    for (int i=0;i<5;i++) {
+      f.print(",D"); f.print(g_plcItems[i].addr); f.print("=");
+      if (g_plcLastOk[i]) f.print(g_plcLastU32[i]); else f.print("NA");
+    }
+    f.println();
   }
   f.close();
 }
