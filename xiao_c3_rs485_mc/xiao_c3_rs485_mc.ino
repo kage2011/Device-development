@@ -178,8 +178,8 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 .ok{background:#d8f8df}.ng{background:#ffe0e0}
 .alarm{cursor:pointer;padding:8px;border:1px solid #e0e0e0;border-radius:8px;margin:6px 0;background:#fff}
 .small{font-size:12px;color:#667}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(90px,1fr));gap:8px;margin-top:8px}
-.cell{border:1px solid #d8deef;border-radius:8px;padding:8px;text-align:center;background:#f6f8ff}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin-top:8px;max-width:100%}
+.cell{border:1px solid #d8deef;border-radius:8px;padding:8px;text-align:center;background:#f6f8ff;min-width:0}
 .cell .n{font-size:12px;color:#445;display:block;margin-bottom:4px}
 .cell .v{font-weight:700}
 .cell.on{background:#d8f8df;border-color:#98d9a8}
@@ -624,19 +624,20 @@ String buildInvReadJson() {
 
   String j = "{";
   j += "\"ok\":" + String((g_fok||g_iok||g_vok||g_stok||g_h74ok||g_h75ok||g_h76ok||g_h77ok) ? "true" : "false") + ",";
+  uint16_t stView = g_st & ((1u<<0)|(1u<<1)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<6)|(1u<<7)|(1u<<15));
   j += "\"freqHz\":" + String(g_fok ? (g_f / 100.0f) : -1, 2) + ",";
   j += "\"currentA\":" + String(g_iok ? (g_i / 100.0f) : -1, 2) + ",";
   j += "\"voltageV\":" + String(g_vok ? (g_v / 10.0f) : -1, 1) + ",";
-  j += "\"statusHex\":\"0x" + String(g_st, HEX) + "\",";
+  j += "\"statusHex\":\"0x" + String(stView, HEX) + "\",";
   j += "\"status\":{";
-  j += "\"run\":" + String((g_st & (1u<<0)) ? "true":"false") + ",";
-  j += "\"fwd\":" + String((g_st & (1u<<1)) ? "true":"false") + ",";
-  j += "\"rev\":" + String((g_st & (1u<<2)) ? "true":"false") + ",";
-  j += "\"su\":"  + String((g_st & (1u<<3)) ? "true":"false") + ",";
-  j += "\"ol\":"  + String((g_st & (1u<<4)) ? "true":"false") + ",";
-  j += "\"fu\":"  + String((g_st & (1u<<6)) ? "true":"false") + ",";
-  j += "\"abc\":" + String((g_st & (1u<<7)) ? "true":"false") + ",";
-  j += "\"alm\":" + String((g_st & (1u<<15)) ? "true":"false");
+  j += "\"run\":" + String((stView & (1u<<0)) ? "true":"false") + ",";
+  j += "\"fwd\":" + String((stView & (1u<<1)) ? "true":"false") + ",";
+  j += "\"rev\":" + String((stView & (1u<<2)) ? "true":"false") + ",";
+  j += "\"su\":"  + String((stView & (1u<<3)) ? "true":"false") + ",";
+  j += "\"ol\":"  + String((stView & (1u<<4)) ? "true":"false") + ",";
+  j += "\"fu\":"  + String((stView & (1u<<6)) ? "true":"false") + ",";
+  j += "\"abc\":" + String((stView & (1u<<7)) ? "true":"false") + ",";
+  j += "\"alm\":" + String((stView & (1u<<15)) ? "true":"false");
   j += "},";
   j += "\"alarms\":[";
   uint8_t aa[4] = {a0,a1,a2,a3};
