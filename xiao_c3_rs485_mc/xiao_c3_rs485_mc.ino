@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <Wire.h>
+#include <SPIFFS.h>
+#include <time.h>
 
 // MAX485 control pins
 static const int PIN_RE = 3;   // Receiver Enable (LOW = receive)
@@ -46,6 +49,17 @@ PlcItem g_plcItems[5] = {
   {40, "word", 32, false},
 };
 
+struct LogConfig {
+  bool enabled;
+  uint32_t intervalMs;
+  String filename;
+  String target;
+  unsigned long lastWriteMs;
+};
+
+LogConfig g_logCfg = {false, 1000, "", "inv", 0};
+String g_logPath = "";
+
 uint32_t toSerialConfig(const String &fmt) {
   if (fmt == "7O1") return SERIAL_7O1;
   if (fmt == "7E1") return SERIAL_7E1;
@@ -54,6 +68,52 @@ uint32_t toSerialConfig(const String &fmt) {
   if (fmt == "8O1") return SERIAL_8O1;
   if (fmt == "8E2") return SERIAL_8E2;
   return SERIAL_8N1;
+}
+
+uint8_t bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
+
+bool syncRtcDs3231(time_t epoch) {
+  struct tm tmv;
+  localtime_r(&epoch, &tmv);
+  Wire.beginTransmission(0x68);
+  Wire.write((uint8_t)0x00);
+  Wire.write(bcd((uint8_t)tmv.tm_sec));
+  Wire.write(bcd((uint8_t)tmv.tm_min));
+  Wire.write(bcd((uint8_t)tmv.tm_hour));
+  Wire.write(bcd((uint8_t)(tmv.tm_wday == 0 ? 7 : tmv.tm_wday)));
+  Wire.write(bcd((uint8_t)tmv.tm_mday));
+  Wire.write(bcd((uint8_t)(tmv.tm_mon + 1)));
+  Wire.write(bcd((uint8_t)(tmv.tm_year - 100)));
+  return Wire.endTransmission() == 0;
+}
+
+String nowStampCompact() {
+  time_t now = time(nullptr);
+  if (now < 1000) return String(millis());
+  struct tm tmv;
+  localtime_r(&now, &tmv);
+  char b[24];
+  snprintf(b, sizeof(b), "%04d%02d%02d_%02d%02d%02d",
+           tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
+           tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+  return String(b);
+}
+
+void ensureLogFile() {
+  if (!g_logCfg.enabled) return;
+  if (g_logPath.length() == 0) {
+    String base = g_logCfg.filename;
+    if (base.length() == 0) base = g_logCfg.target + "_" + nowStampCompact();
+    if (!base.endsWith(".csv")) base += ".csv";
+    if (!base.startsWith("/")) base = "/" + base;
+    g_logPath = base;
+    File f = SPIFFS.open(g_logPath, FILE_WRITE);
+    if (f) {
+      if (g_logCfg.target == "inv") f.println("ts,freq_hz,current_a,voltage_v,status_hex");
+      else f.println("ts,target,note");
+      f.close();
+    }
+  }
 }
 
 void applySerialProfile(ProtoMode mode) {
@@ -173,6 +233,8 @@ void setupWebUi() {
 body{font-family:sans-serif;padding:12px;background:#f7f8fb;color:#1e2430}
 label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6px;margin-top:4px}
 .card{background:#fff;border:1px solid #d7dbea;border-radius:10px;padding:10px;margin:10px 0}
+#fabWrap{position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.fab{border:none;border-radius:999px;padding:10px 12px;background:#2e7dff;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .kpi{display:inline-block;min-width:110px;background:#eef3ff;border-radius:8px;padding:8px;margin:4px}
 .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#e8edf7;margin-right:6px}
 .ok{background:#d8f8df}.ng{background:#ffe0e0}
@@ -187,6 +249,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border-radius:8px;margin:6px 0}
 </style></head>
 <body><h3>RS485COM</h3>
+<div id='mainPage'>
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
 <div id='plcCfg'>
@@ -208,8 +271,11 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div id='plcOut' class='small'></div>
 </div>
 
-<div class='card' id='invCard'>
+</div>
+
+<div class='card' id='invCard' style='display:none'>
 <h4>INV Dashboard</h4>
+<button onclick='backToMain()'>← Back</button>
 <button onclick='readInvNow()'>Read INV</button>
 <div id='invDash' style='display:none'>
 <div id='invKpi'></div>
@@ -225,6 +291,10 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <button onclick='readInvAlarms()'>Read Alarms</button>
 <div id='alarms'></div>
 </div>
+
+<div id='fabWrap'>
+  <button class='fab' onclick='syncTime()'>時刻同期</button>
+  <button class='fab' onclick='openSaveSettings()'>保存設定</button>
 </div>
 
 <script>
@@ -238,10 +308,13 @@ function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:
 function updateModePanels(){
   const isInv = mode.value==='inv';
   plcCard.style.display = isInv ? 'none' : 'block';
-  invCard.style.display = isInv ? 'block' : 'none';
   plcCfg.style.display = isInv ? 'none' : 'block';
   invCfg.style.display = isInv ? 'block' : 'none';
-  if(!isInv){ invActive=false; invDash.style.display='none'; }
+  if(!isInv){ invActive=false; invDash.style.display='none'; invCard.style.display='none'; mainPage.style.display='block'; }
+}
+function backToMain(){
+  invCard.style.display='none';
+  mainPage.style.display='block';
 }
 
 async function load(){
@@ -350,6 +423,8 @@ function toggleDetail(i){ expandedAlarm[i]=!expandedAlarm[i]; renderAlarms(); }
 
 async function readInvNow(){
   invActive=true;
+  mainPage.style.display='none';
+  invCard.style.display='block';
   invDash.style.display='block';
   let r=await fetch('/invread'); let j=await r.json(); renderInv(j,false);
 }
@@ -357,6 +432,20 @@ async function readInvAlarms(){
   invActive=true;
   invDash.style.display='block';
   let r=await fetch('/invalarms'); let j=await r.json(); renderInv(j,true);
+}
+
+async function syncTime(){
+  const epoch = Math.floor(Date.now()/1000);
+  let p = new URLSearchParams({epoch:String(epoch)});
+  await fetch('/timesync',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+}
+
+async function openSaveSettings(){
+  const en = confirm('CSV保存を有効にしますか？（キャンセルで無効）');
+  const interval = prompt('保存間隔(ms): 100 / 1000 / 10000 / 30000', '1000') || '1000';
+  const fname = prompt('ファイル名（空欄=自動: 対象+開始日時）', '') || '';
+  let p = new URLSearchParams({enabled: en?'1':'0', intervalMs: interval, filename: fname, target: mode.value});
+  await fetch('/logcfg',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
 function startPolling(){
@@ -395,6 +484,30 @@ load();
     if (g_web.hasArg("invFmt")) g_invProfile.fmt = g_web.arg("invFmt");
     if (g_web.hasArg("mode") && g_web.arg("mode") == "inv") applySerialProfile(MODE_INV_FRD820);
     else applySerialProfile(MODE_PLC_FX5_1C);
+    g_web.send(200, "text/plain", "OK");
+  });
+
+  g_web.on("/timesync", HTTP_POST, []() {
+    if (!g_web.hasArg("epoch")) { g_web.send(400, "text/plain", "epoch required"); return; }
+    time_t ep = (time_t)g_web.arg("epoch").toInt();
+    struct timeval tv = { .tv_sec = ep, .tv_usec = 0 };
+    settimeofday(&tv, nullptr);
+    bool rtcOk = syncRtcDs3231(ep);
+    g_web.send(200, "application/json", String("{\"ok\":true,\"rtc\":") + (rtcOk ? "true" : "false") + "}");
+  });
+
+  g_web.on("/logcfg", HTTP_POST, []() {
+    if (g_web.hasArg("enabled")) g_logCfg.enabled = (g_web.arg("enabled") == "1");
+    if (g_web.hasArg("intervalMs")) {
+      long iv = g_web.arg("intervalMs").toInt();
+      if (iv < 50) iv = 50;
+      g_logCfg.intervalMs = (uint32_t)iv;
+    }
+    if (g_web.hasArg("filename")) g_logCfg.filename = g_web.arg("filename");
+    if (g_web.hasArg("target")) g_logCfg.target = g_web.arg("target");
+    g_logCfg.lastWriteMs = 0;
+    if (!g_logCfg.enabled) g_logPath = "";
+    else g_logPath = ""; // force re-create with start timestamp/custom name
     g_web.send(200, "text/plain", "OK");
   });
 
@@ -519,6 +632,8 @@ void setup() {
   rs485RxMode();
 
   applySerialProfile(MODE_PLC_FX5_1C);
+  Wire.begin();
+  SPIFFS.begin(true);
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID); // open AP (no password)
@@ -665,6 +780,30 @@ void refreshInvAlarms() {
   g_h76ok = readInverterOnce("76", g_h76);
   g_h77ok = readInverterOnce("77", g_h77);
   g_alarmInitialized = true;
+}
+
+void maybeWriteCsvLog() {
+  if (!g_logCfg.enabled) return;
+  if (millis() - g_logCfg.lastWriteMs < g_logCfg.intervalMs) return;
+  g_logCfg.lastWriteMs = millis();
+  ensureLogFile();
+  if (g_logPath.length() == 0) return;
+  File f = SPIFFS.open(g_logPath, FILE_APPEND);
+  if (!f) return;
+  time_t now = time(nullptr);
+  String ts = (now > 1000) ? String((uint32_t)now) : String(millis());
+  if (g_logCfg.target == "inv") {
+    uint16_t stView = g_st & ((1u<<0)|(1u<<1)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<6)|(1u<<7)|(1u<<15));
+    char hx[12]; snprintf(hx, sizeof(hx), "0x%X", stView);
+    f.print(ts); f.print(",");
+    f.print(g_fok ? (g_f / 100.0f) : -1); f.print(",");
+    f.print(g_iok ? (g_i / 100.0f) : -1); f.print(",");
+    f.print(g_vok ? (g_v / 10.0f) : -1); f.print(",");
+    f.println(hx);
+  } else {
+    f.print(ts); f.println(",plc,not_implemented");
+  }
+  f.close();
 }
 
 String buildInvReadJson() {
@@ -945,6 +1084,7 @@ bool readOnce1E() {
 
 void loop() {
   g_web.handleClient();
+  maybeWriteCsvLog();
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
