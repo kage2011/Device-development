@@ -88,7 +88,7 @@ void ensureLogFile() {
     String base = g_logCfg.filename;
     if (base.length() == 0) base = g_logCfg.target + "_" + nowStampCompact();
     if (!base.endsWith(".csv")) base += ".csv";
-    g_logPath = "/sd/" + base;
+    g_logPath = "/" + base;
     File f = SD.open(g_logPath, FILE_WRITE);
     if (f) {
       if (g_logCfg.target == "inv") {
@@ -99,6 +99,9 @@ void ensureLogFile() {
         f.println();
       }
       f.close();
+      Serial.print("LOG create: "); Serial.println(g_logPath);
+    } else {
+      Serial.print("LOG create NG: "); Serial.println(g_logPath);
     }
   }
 }
@@ -553,9 +556,13 @@ load();
     }
     if (g_web.hasArg("filename")) g_logCfg.filename = g_web.arg("filename");
     if (g_web.hasArg("target")) g_logCfg.target = g_web.arg("target");
-    g_logCfg.lastWriteMs = 0;
-    if (!g_logCfg.enabled) g_logPath = "";
-    else g_logPath = ""; // force re-create with start timestamp/custom name
+    if (!g_logCfg.enabled) {
+      g_logPath = "";
+      g_logCfg.lastWriteMs = millis();
+    } else {
+      g_logPath = ""; // force re-create with start timestamp/custom name
+      g_logCfg.lastWriteMs = millis() - g_logCfg.intervalMs; // start immediately
+    }
     g_web.send(200, "text/plain", "OK");
   });
 
