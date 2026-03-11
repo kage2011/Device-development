@@ -221,8 +221,8 @@ body{font-family:sans-serif;padding:12px;background:linear-gradient(160deg,#0f17
 label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:8px 10px;margin-top:4px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e5ecff}
 .card{background:rgba(15,23,42,.85);border:1px solid #334155;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 button{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff}
-#fabWrap{position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:9999}
-.fab{border:none;border-radius:999px;padding:10px 12px;background:linear-gradient(135deg,#06b6d4,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+#fabWrap{position:fixed;right:10px;top:10px;display:flex;flex-direction:row;gap:6px;z-index:9999;align-items:flex-start}
+.fab{border:none;border-radius:999px;padding:6px 10px;font-size:12px;background:linear-gradient(135deg,#06b6d4,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 .kpi{display:inline-block;min-width:110px;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:8px;margin:4px;color:#e2e8f0}
 .badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#1e293b;margin-right:6px}
 .ok{background:#14532d}.ng{background:#3f3f46}
@@ -456,7 +456,8 @@ async function readInvAlarms(){
 
 async function syncTime(){
   const epoch = Math.floor(Date.now()/1000);
-  let p = new URLSearchParams({epoch:String(epoch)});
+  const tzMin = new Date().getTimezoneOffset();
+  let p = new URLSearchParams({epoch:String(epoch), tzMin:String(tzMin)});
   let r = await fetch('/timesync',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   let j = await r.json();
   alert(j && j.rtc ? '時刻同期完了' : '時刻同期失敗');
@@ -528,9 +529,11 @@ load();
 
   g_web.on("/timesync", HTTP_POST, []() {
     if (!g_web.hasArg("epoch")) { g_web.send(400, "text/plain", "epoch required"); return; }
-    uint32_t ep = (uint32_t)g_web.arg("epoch").toInt();
+    long ep = g_web.arg("epoch").toInt();
+    long tzMin = g_web.hasArg("tzMin") ? g_web.arg("tzMin").toInt() : 0;
+    long epLocal = ep - (tzMin * 60L);
     bool rtcOk = rtc.begin();
-    if (rtcOk) rtc.adjust(DateTime(ep));
+    if (rtcOk) rtc.adjust(DateTime((uint32_t)epLocal));
     g_web.send(200, "application/json", String("{\"ok\":true,\"rtc\":") + (rtcOk ? "true" : "false") + "}");
   });
 
