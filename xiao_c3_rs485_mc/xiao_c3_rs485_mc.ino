@@ -374,7 +374,7 @@ load();
   });
 
   g_web.on("/invread", HTTP_GET, []() {
-    applySerialProfile(MODE_INV_FRD820);
+    if (g_mode != MODE_INV_FRD820) applySerialProfile(MODE_INV_FRD820);
     String j = buildInvReadJson();
     g_web.send(200, "application/json", j);
   });
@@ -455,6 +455,9 @@ void setup() {
   Serial.println("type: setproto plc / setproto inv / proto");
 }
 
+static uint16_t g_f=0, g_i=0, g_v=0, g_st=0;
+static bool g_fok=false, g_iok=false, g_vok=false, g_stok=false;
+static uint8_t g_fastIdx=0;
 static uint16_t g_h74=0, g_h75=0, g_h76=0, g_h77=0;
 static bool g_h74ok=false, g_h75ok=false, g_h76ok=false, g_h77ok=false;
 static unsigned long g_alarmCacheMs=0;
@@ -575,19 +578,26 @@ String invAlarmDetail(uint8_t c) {
 }
 
 String buildInvReadJson() {
-  uint16_t f=0,i=0,v=0,st=0;
-  bool okF  = readInverterOnce("6F", f);
-  bool okI  = readInverterOnce("70", i);
-  bool okV  = readInverterOnce("71", v);
-  bool okSt = readInverterOnce("79", st);
+  // round-robin: one fast register per request (stability first)
+  if (g_fastIdx == 0) g_fok  = readInverterOnce("6F", g_f);
+  else if (g_fastIdx == 1) g_iok  = readInverterOnce("70", g_i);
+  else if (g_fastIdx == 2) g_vok  = readInverterOnce("71", g_v);
+  else g_stok = readInverterOnce("79", g_st);
+  g_fastIdx = (g_fastIdx + 1) % 4;
 
-  // Alarm history is heavy; refresh cache every 10s (or first time)
+  // Alarm history: one register every 10s window to avoid burst load
   unsigned long now = millis();
   if ((now - g_alarmCacheMs > 10000UL) || (!g_h74ok && !g_h75ok && !g_h76ok && !g_h77ok)) {
-    g_h74ok = readInverterOnce("74", g_h74);
-    g_h75ok = readInverterOnce("75", g_h75);
-    g_h76ok = readInverterOnce("76", g_h76);
-    g_h77ok = readInverterOnce("77", g_h77);
+    if (!g_h74ok) g_h74ok = readInverterOnce("74", g_h74);
+    else if (!g_h75ok) g_h75ok = readInverterOnce("75", g_h75);
+    else if (!g_h76ok) g_h76ok = readInverterOnce("76", g_h76);
+    else if (!g_h77ok) g_h77ok = readInverterOnce("77", g_h77);
+    else {
+      g_h74ok = readInverterOnce("74", g_h74);
+      g_h75ok = readInverterOnce("75", g_h75);
+      g_h76ok = readInverterOnce("76", g_h76);
+      g_h77ok = readInverterOnce("77", g_h77);
+    }
     g_alarmCacheMs = now;
   }
 
@@ -597,20 +607,20 @@ String buildInvReadJson() {
   uint8_t a3 = (uint8_t)((g_h75 >> 8) & 0x00FF);
 
   String j = "{";
-  j += "\"ok\":" + String((okF||okI||okV||okSt||g_h74ok||g_h75ok||g_h76ok||g_h77ok) ? "true" : "false") + ",";
-  j += "\"freqHz\":" + String(okF ? (f / 100.0f) : -1, 2) + ",";
-  j += "\"currentA\":" + String(okI ? (i / 100.0f) : -1, 2) + ",";
-  j += "\"voltageV\":" + String(okV ? (v / 10.0f) : -1, 1) + ",";
-  j += "\"statusHex\":\"0x" + String(st, HEX) + "\",";
+  j += "\"ok\":" + String((g_fok||g_iok||g_vok||g_stok||g_h74ok||g_h75ok||g_h76ok||g_h77ok) ? "true" : "false") + ",";
+  j += "\"freqHz\":" + String(g_fok ? (g_f / 100.0f) : -1, 2) + ",";
+  j += "\"currentA\":" + String(g_iok ? (g_i / 100.0f) : -1, 2) + ",";
+  j += "\"voltageV\":" + String(g_vok ? (g_v / 10.0f) : -1, 1) + ",";
+  j += "\"statusHex\":\"0x" + String(g_st, HEX) + "\",";
   j += "\"status\":{";
-  j += "\"run\":" + String((st & (1u<<0)) ? "true":"false") + ",";
-  j += "\"fwd\":" + String((st & (1u<<1)) ? "true":"false") + ",";
-  j += "\"rev\":" + String((st & (1u<<2)) ? "true":"false") + ",";
-  j += "\"su\":"  + String((st & (1u<<3)) ? "true":"false") + ",";
-  j += "\"ol\":"  + String((st & (1u<<4)) ? "true":"false") + ",";
-  j += "\"fu\":"  + String((st & (1u<<6)) ? "true":"false") + ",";
-  j += "\"abc\":" + String((st & (1u<<7)) ? "true":"false") + ",";
-  j += "\"alm\":" + String((st & (1u<<15)) ? "true":"false");
+  j += "\"run\":" + String((g_st & (1u<<0)) ? "true":"false") + ",";
+  j += "\"fwd\":" + String((g_st & (1u<<1)) ? "true":"false") + ",";
+  j += "\"rev\":" + String((g_st & (1u<<2)) ? "true":"false") + ",";
+  j += "\"su\":"  + String((g_st & (1u<<3)) ? "true":"false") + ",";
+  j += "\"ol\":"  + String((g_st & (1u<<4)) ? "true":"false") + ",";
+  j += "\"fu\":"  + String((g_st & (1u<<6)) ? "true":"false") + ",";
+  j += "\"abc\":" + String((g_st & (1u<<7)) ? "true":"false") + ",";
+  j += "\"alm\":" + String((g_st & (1u<<15)) ? "true":"false");
   j += "},";
   j += "\"alarms\":[";
   uint8_t aa[4] = {a0,a1,a2,a3};
