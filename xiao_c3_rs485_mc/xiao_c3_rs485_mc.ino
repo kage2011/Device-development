@@ -210,19 +210,20 @@ void setupWebUi() {
 <!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
 <title>RS485COM</title>
 <style>
-body{font-family:sans-serif;padding:12px;background:#f7f8fb;color:#1e2430}
-label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6px;margin-top:4px}
-.card{background:#fff;border:1px solid #d7dbea;border-radius:10px;padding:10px;margin:10px 0}
+body{font-family:sans-serif;padding:12px;background:linear-gradient(160deg,#0f172a,#111827 45%,#0b1020);color:#e5ecff}
+label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:8px 10px;margin-top:4px;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e5ecff}
+.card{background:rgba(15,23,42,.85);border:1px solid #334155;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+button{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff}
 #fabWrap{position:fixed;right:12px;bottom:12px;display:flex;flex-direction:column;gap:8px;z-index:9999}
-.fab{border:none;border-radius:999px;padding:10px 12px;background:#2e7dff;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.kpi{display:inline-block;min-width:110px;background:#eef3ff;border-radius:8px;padding:8px;margin:4px}
-.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#e8edf7;margin-right:6px}
-.ok{background:#d8f8df}.ng{background:#ffe0e0}
-.alarm{cursor:pointer;padding:8px;border:1px solid #e0e0e0;border-radius:8px;margin:6px 0;background:#fff}
-.small{font-size:12px;color:#667}
+.fab{border:none;border-radius:999px;padding:10px 12px;background:linear-gradient(135deg,#06b6d4,#2563eb);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.kpi{display:inline-block;min-width:110px;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:8px;margin:4px;color:#e2e8f0}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#1e293b;margin-right:6px}
+.ok{background:#14532d}.ng{background:#3f3f46}
+.alarm{cursor:pointer;padding:8px;border:1px solid #334155;border-radius:10px;margin:6px 0;background:#0f172a}
+.small{font-size:12px;color:#94a3b8}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:8px;margin-top:8px;max-width:100%}
-.cell{border:1px solid #d8deef;border-radius:8px;padding:8px;text-align:center;background:#f6f8ff;min-width:0}
-.cell .n{font-size:12px;color:#445;display:block;margin-bottom:4px}
+.cell{border:1px solid #334155;border-radius:8px;padding:8px;text-align:center;background:#0b1220;min-width:0}
+.cell .n{font-size:12px;color:#93c5fd;display:block;margin-bottom:4px}
 .cell .v{font-weight:700}
 .cell.on{background:#d8f8df;border-color:#98d9a8}
 .cell.off{background:#eceff3;border-color:#c5cbd5}
@@ -241,6 +242,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
 </div>
 <button onclick='save()'>Save & Apply</button>
+<button onclick='readInvNow()'>Read INV</button>
 </div>
 
 <div class='card' id='plcCard'>
@@ -256,7 +258,6 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div class='card' id='invCard' style='display:none'>
 <h4>INV Dashboard</h4>
 <button onclick='backToMain()'>← Back</button>
-<button onclick='readInvNow()'>Read INV</button>
 <div id='invDash' style='display:none'>
 <div id='invKpi'></div>
 <div id='invStatus'></div>
@@ -279,6 +280,10 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
     <label><input type='checkbox' id='logEnable'> CSV保存有効</label>
     <label>保存間隔
       <select id='logInterval'>
+        <option value='100'>0.1秒</option>
+        <option value='1000' selected>1秒</option>
+        <option value='10000'>10秒</option>
+        <option value='30000'>30秒</option>
         <option value='60000'>1分</option>
         <option value='600000'>10分</option>
         <option value='1800000'>30分</option>
