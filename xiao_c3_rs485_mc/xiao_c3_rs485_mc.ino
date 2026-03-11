@@ -184,6 +184,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 .cell .v{font-weight:700}
 .cell.on{background:#d8f8df;border-color:#98d9a8}
 .cell.off{background:#eceff3;border-color:#c5cbd5}
+canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border-radius:8px;margin:6px 0}
 </style></head>
 <body><h3>RS485COM</h3>
 <div class='card'>
@@ -213,17 +214,26 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <div id='invDash' style='display:none'>
 <div id='invKpi'></div>
 <div id='invStatus'></div>
+<div class='card'>
+  <h5>Trend</h5>
+  <div class='small'>Hz(左軸) + V(右軸)</div>
+  <canvas id='hzvChart' width='640' height='180'></canvas>
+  <div class='small'>A(単独)</div>
+  <canvas id='curChart' width='640' height='160'></canvas>
+</div>
 <h5>Alarm History (名称のみ / クリックで詳細)</h5>
 <button onclick='readInvAlarms()'>Read Alarms</button>
 <div id='alarms'></div>
 </div>
 </div>
-<pre id='st'></pre>
 
 <script>
 let timer=null;
 let pollBusy=false;
 let invActive=false;
+let hzHist=[], vHist=[], aHist=[];
+let lastAlarms=[];
+let expandedAlarm={};
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 function updateModePanels(){
   const isInv = mode.value==='inv';
@@ -238,15 +248,13 @@ async function load(){
   let r=await fetch('/cfg');let j=await r.json();
   mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;
   let pr=await fetch('/plccfg'); let pj=await pr.json(); plcItems.innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
-  st.textContent=JSON.stringify(j,null,2);
   updateModePanels();
   startPolling();
 }
 
 async function save(){
   let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
-  let r=await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  st.textContent=await r.text();
+  await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   setTimeout(load,300);
 }
 
@@ -258,8 +266,7 @@ async function savePlc(){
     p.append('width'+i,document.getElementById('w'+i).value);
     p.append('sign'+i,document.getElementById('s'+i).value);
   }
-  let r=await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  st.textContent=await r.text();
+  await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
 async function readPlcNow(){
@@ -268,7 +275,39 @@ async function readPlcNow(){
 }
 
 function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
-function renderInv(j){
+function pushHist(arr,v){ if(v>=0){arr.push(v); if(arr.length>120) arr.shift();} }
+function drawLines(cv, series, colors, minY, maxY){
+  const ctx=cv.getContext('2d'); const w=cv.width,h=cv.height;
+  ctx.clearRect(0,0,w,h); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='#e9edf7'; for(let i=1;i<5;i++){const y=i*h/5; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();}
+  series.forEach((arr,idx)=>{
+    if(arr.length<2) return;
+    ctx.strokeStyle=colors[idx]; ctx.lineWidth=2; ctx.beginPath();
+    for(let i=0;i<arr.length;i++){
+      const x=i*(w-8)/(Math.max(1,arr.length-1))+4;
+      const y=h-((arr[i]-minY)/(Math.max(0.0001,maxY-minY)))*(h-12)-6;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  });
+}
+function drawInvCharts(){
+  const hzv = document.getElementById('hzvChart');
+  const cur = document.getElementById('curChart');
+  if(!hzv || !cur) return;
+  const hzMin=Math.min(...hzHist,0), hzMax=Math.max(...hzHist,1);
+  const vMin=Math.min(...vHist,0), vMax=Math.max(...vHist,1);
+  const cMin=Math.min(...aHist,0), cMax=Math.max(...aHist,1);
+  // Normalize Hz+V on one chart by mapping each to 0..1 then drawing
+  const hzN=hzHist.map(v=>(v-hzMin)/Math.max(0.0001,hzMax-hzMin));
+  const vN=vHist.map(v=>(v-vMin)/Math.max(0.0001,vMax-vMin));
+  drawLines(hzv,[hzN,vN],['#2e7dff','#ff6d00'],0,1);
+  drawLines(cur,[aHist],['#26a69a'],cMin,cMax);
+}
+function renderAlarms(){
+  alarms.innerHTML = lastAlarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:${expandedAlarm[i]?'block':'none'};margin-top:4px'>${a.detail}</div></div>`).join('');
+}
+function renderInv(j, updateAlarms){
   invKpi.innerHTML = `<div class='kpi'>Hz: ${j.freqHz}</div><div class='kpi'>A: ${j.currentA}</div><div class='kpi'>V: ${j.voltageV}</div><div class='kpi'>${j.statusHex}</div>`;
   invStatus.innerHTML = `<div class='grid'>`
     + bitCell('RUN',j.status.run)
@@ -280,20 +319,23 @@ function renderInv(j){
     + bitCell('ABC',j.status.abc)
     + bitCell('ALM',j.status.alm)
     + `</div>`;
-  alarms.innerHTML = j.alarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:none;margin-top:4px'>${a.detail}</div></div>`).join('');
-  window._lastAlarms = j.alarms;
+  pushHist(hzHist, Number(j.freqHz));
+  pushHist(aHist, Number(j.currentA));
+  pushHist(vHist, Number(j.voltageV));
+  drawInvCharts();
+  if(updateAlarms || lastAlarms.length===0){ lastAlarms = j.alarms || []; renderAlarms(); }
 }
-function toggleDetail(i){const e=document.getElementById('d'+i); if(e) e.style.display=(e.style.display==='none')?'block':'none';}
+function toggleDetail(i){ expandedAlarm[i]=!expandedAlarm[i]; renderAlarms(); }
 
 async function readInvNow(){
   invActive=true;
   invDash.style.display='block';
-  let r=await fetch('/invread'); let j=await r.json(); renderInv(j);
+  let r=await fetch('/invread'); let j=await r.json(); renderInv(j,false);
 }
 async function readInvAlarms(){
   invActive=true;
   invDash.style.display='block';
-  let r=await fetch('/invalarms'); let j=await r.json(); renderInv(j);
+  let r=await fetch('/invalarms'); let j=await r.json(); renderInv(j,true);
 }
 
 function startPolling(){
