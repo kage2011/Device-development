@@ -2,8 +2,8 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Wire.h>
-#include <SPIFFS.h>
-#include <time.h>
+#include <RTClib.h>
+#include <SD.h>
 
 // MAX485 control pins
 static const int PIN_RE = 3;   // Receiver Enable (LOW = receive)
@@ -33,6 +33,8 @@ SerialProfile g_invProfile = {19200, "8E2"};
 
 WebServer g_web(80);
 const char *AP_SSID = "RS485COM";
+RTC_DS3231 rtc;
+const int SD_CS_PIN = 5;
 
 struct PlcItem {
   uint16_t addr;
@@ -70,32 +72,11 @@ uint32_t toSerialConfig(const String &fmt) {
   return SERIAL_8N1;
 }
 
-uint8_t bcd(uint8_t v) { return (uint8_t)(((v / 10) << 4) | (v % 10)); }
-
-bool syncRtcDs3231(time_t epoch) {
-  struct tm tmv;
-  localtime_r(&epoch, &tmv);
-  Wire.beginTransmission(0x68);
-  Wire.write((uint8_t)0x00);
-  Wire.write(bcd((uint8_t)tmv.tm_sec));
-  Wire.write(bcd((uint8_t)tmv.tm_min));
-  Wire.write(bcd((uint8_t)tmv.tm_hour));
-  Wire.write(bcd((uint8_t)(tmv.tm_wday == 0 ? 7 : tmv.tm_wday)));
-  Wire.write(bcd((uint8_t)tmv.tm_mday));
-  Wire.write(bcd((uint8_t)(tmv.tm_mon + 1)));
-  Wire.write(bcd((uint8_t)(tmv.tm_year - 100)));
-  return Wire.endTransmission() == 0;
-}
-
 String nowStampCompact() {
-  time_t now = time(nullptr);
-  if (now < 1000) return String(millis());
-  struct tm tmv;
-  localtime_r(&now, &tmv);
+  DateTime dt = rtc.now();
   char b[24];
   snprintf(b, sizeof(b), "%04d%02d%02d_%02d%02d%02d",
-           tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday,
-           tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+           dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
   return String(b);
 }
 
@@ -105,9 +86,8 @@ void ensureLogFile() {
     String base = g_logCfg.filename;
     if (base.length() == 0) base = g_logCfg.target + "_" + nowStampCompact();
     if (!base.endsWith(".csv")) base += ".csv";
-    if (!base.startsWith("/")) base = "/" + base;
-    g_logPath = base;
-    File f = SPIFFS.open(g_logPath, FILE_WRITE);
+    g_logPath = "/sd/" + base;
+    File f = SD.open(g_logPath, FILE_WRITE);
     if (f) {
       if (g_logCfg.target == "inv") f.println("ts,freq_hz,current_a,voltage_v,status_hex");
       else f.println("ts,target,note");
@@ -295,6 +275,20 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div id='fabWrap'>
   <button class='fab' onclick='syncTime()'>時刻同期</button>
   <button class='fab' onclick='openSaveSettings()'>保存設定</button>
+  <div id='savePanel' class='card' style='display:none;min-width:240px'>
+    <label><input type='checkbox' id='logEnable'> CSV保存有効</label>
+    <label>保存間隔
+      <select id='logInterval'>
+        <option value='60000'>1分</option>
+        <option value='600000'>10分</option>
+        <option value='1800000'>30分</option>
+        <option value='3600000'>1時間</option>
+      </select>
+    </label>
+    <label>ファイル名(任意)<input id='logFile' placeholder='空欄で自動'></label>
+    <button onclick='saveLogSettings()'>保存</button>
+    <button onclick='closeSaveSettings()'>閉じる</button>
+  </div>
 </div>
 
 <script>
@@ -440,12 +434,21 @@ async function syncTime(){
   await fetch('/timesync',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
-async function openSaveSettings(){
-  const en = confirm('CSV保存を有効にしますか？（キャンセルで無効）');
-  const interval = prompt('保存間隔(ms): 100 / 1000 / 10000 / 30000', '1000') || '1000';
-  const fname = prompt('ファイル名（空欄=自動: 対象+開始日時）', '') || '';
-  let p = new URLSearchParams({enabled: en?'1':'0', intervalMs: interval, filename: fname, target: mode.value});
+function openSaveSettings(){
+  savePanel.style.display='block';
+}
+function closeSaveSettings(){
+  savePanel.style.display='none';
+}
+async function saveLogSettings(){
+  let p = new URLSearchParams({
+    enabled: logEnable.checked?'1':'0',
+    intervalMs: logInterval.value,
+    filename: logFile.value || '',
+    target: mode.value
+  });
   await fetch('/logcfg',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  closeSaveSettings();
 }
 
 function startPolling(){
@@ -489,10 +492,9 @@ load();
 
   g_web.on("/timesync", HTTP_POST, []() {
     if (!g_web.hasArg("epoch")) { g_web.send(400, "text/plain", "epoch required"); return; }
-    time_t ep = (time_t)g_web.arg("epoch").toInt();
-    struct timeval tv = { .tv_sec = ep, .tv_usec = 0 };
-    settimeofday(&tv, nullptr);
-    bool rtcOk = syncRtcDs3231(ep);
+    uint32_t ep = (uint32_t)g_web.arg("epoch").toInt();
+    bool rtcOk = rtc.begin();
+    if (rtcOk) rtc.adjust(DateTime(ep));
     g_web.send(200, "application/json", String("{\"ok\":true,\"rtc\":") + (rtcOk ? "true" : "false") + "}");
   });
 
@@ -633,7 +635,14 @@ void setup() {
 
   applySerialProfile(MODE_PLC_FX5_1C);
   Wire.begin();
-  SPIFFS.begin(true);
+  if (!rtc.begin()) {
+    Serial.println("RTC NG");
+  } else {
+    if (rtc.lostPower()) rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+  if (!SD.begin(SD_CS_PIN, SPI, 24000000, "/sd")) {
+    Serial.println("SD NG");
+  }
 
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID); // open AP (no password)
@@ -788,10 +797,11 @@ void maybeWriteCsvLog() {
   g_logCfg.lastWriteMs = millis();
   ensureLogFile();
   if (g_logPath.length() == 0) return;
-  File f = SPIFFS.open(g_logPath, FILE_APPEND);
+  File f = SD.open(g_logPath, FILE_APPEND);
   if (!f) return;
-  time_t now = time(nullptr);
-  String ts = (now > 1000) ? String((uint32_t)now) : String(millis());
+  DateTime dt = rtc.now();
+  char ts[24];
+  snprintf(ts, sizeof(ts), "%04d-%02d-%02d %02d:%02d:%02d", dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
   if (g_logCfg.target == "inv") {
     uint16_t stView = g_st & ((1u<<0)|(1u<<1)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<6)|(1u<<7)|(1u<<15));
     char hx[12]; snprintf(hx, sizeof(hx), "0x%X", stView);
