@@ -234,15 +234,14 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
 <div id='plcCfg'>
-<label>PLC Baud<input id='plcBaud' type='number'></label>
+<label>PLC Baud<select id='plcBaud'><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
 <label>PLC Format<select id='plcFmt'><option>7O1</option><option>7E1</option><option>8N1</option><option>8E1</option><option>8O1</option><option>8E2</option></select></label>
 </div>
 <div id='invCfg'>
-<label>INV Baud<input id='invBaud' type='number'></label>
+<label>INV Baud<select id='invBaud'><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
 </div>
 <button onclick='save()'>Save & Apply</button>
-<button onclick='readInvNow()'>Read INV</button>
 </div>
 
 <div class='card' id='plcCard'>
@@ -327,7 +326,12 @@ async function load(){
 async function save(){
   let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
-  setTimeout(load,300);
+  if(mode.value==='inv') {
+    await readInvNow();
+  } else {
+    await readPlcNow();
+    plcCard.scrollIntoView({behavior:'smooth', block:'start'});
+  }
 }
 
 async function savePlc(){
