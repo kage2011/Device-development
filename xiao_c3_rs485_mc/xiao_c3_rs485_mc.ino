@@ -451,6 +451,10 @@ void setup() {
   Serial.println("type: setproto plc / setproto inv / proto");
 }
 
+static uint16_t g_h74=0, g_h75=0, g_h76=0, g_h77=0;
+static bool g_h74ok=false, g_h75ok=false, g_h76ok=false, g_h77ok=false;
+static unsigned long g_alarmCacheMs=0;
+
 bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   const uint8_t ENQ = 0x05;
   const uint8_t CR = 0x0D;
@@ -464,7 +468,7 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
     return String(c);
   };
 
-  auto trySend = [&](const String &body, bool addLF) -> bool {
+  auto trySend = [&](const String &body, bool addLF, uint16_t timeoutMs) -> bool {
     while (Serial1.available()) Serial1.read();
 
     String cks = checksum2(body);
@@ -481,7 +485,7 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
 
     uint8_t raw[96]; size_t n = 0;
     unsigned long t0 = millis();
-    while (millis() - t0 < 900 && n < sizeof(raw)) {
+    while (millis() - t0 < timeoutMs && n < sizeof(raw)) {
       if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
     }
 
@@ -513,8 +517,8 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   String b1 = String("00") + cmd2;
   String b2 = String("00") + cmd2 + "0";
 
-  if (trySend(b1, false)) return true;
-  if (trySend(b2, false)) return true;
+  if (trySend(b1, false, 180)) return true;
+  if (trySend(b2, false, 180)) return true;
   // keep CR-only per user setting
   return false;
 }
@@ -564,23 +568,29 @@ String invAlarmDetail(uint8_t c) {
 }
 
 String buildInvReadJson() {
-  uint16_t f=0,i=0,v=0,st=0,h74=0,h75=0,h76=0,h77=0;
+  uint16_t f=0,i=0,v=0,st=0;
   bool okF  = readInverterOnce("6F", f);
   bool okI  = readInverterOnce("70", i);
   bool okV  = readInverterOnce("71", v);
   bool okSt = readInverterOnce("79", st);
-  bool ok74 = readInverterOnce("74", h74);
-  bool ok75 = readInverterOnce("75", h75);
-  bool ok76 = readInverterOnce("76", h76);
-  bool ok77 = readInverterOnce("77", h77);
 
-  uint8_t a0 = (uint8_t)(h74 & 0x00FF);
-  uint8_t a1 = (uint8_t)((h74 >> 8) & 0x00FF);
-  uint8_t a2 = (uint8_t)(h75 & 0x00FF);
-  uint8_t a3 = (uint8_t)((h75 >> 8) & 0x00FF);
+  // Alarm history is heavy; refresh cache every 10s (or first time)
+  unsigned long now = millis();
+  if ((now - g_alarmCacheMs > 10000UL) || (!g_h74ok && !g_h75ok && !g_h76ok && !g_h77ok)) {
+    g_h74ok = readInverterOnce("74", g_h74);
+    g_h75ok = readInverterOnce("75", g_h75);
+    g_h76ok = readInverterOnce("76", g_h76);
+    g_h77ok = readInverterOnce("77", g_h77);
+    g_alarmCacheMs = now;
+  }
+
+  uint8_t a0 = (uint8_t)(g_h74 & 0x00FF);
+  uint8_t a1 = (uint8_t)((g_h74 >> 8) & 0x00FF);
+  uint8_t a2 = (uint8_t)(g_h75 & 0x00FF);
+  uint8_t a3 = (uint8_t)((g_h75 >> 8) & 0x00FF);
 
   String j = "{";
-  j += "\"ok\":" + String((okF||okI||okV||okSt||ok74||ok75||ok76||ok77) ? "true" : "false") + ",";
+  j += "\"ok\":" + String((okF||okI||okV||okSt||g_h74ok||g_h75ok||g_h76ok||g_h77ok) ? "true" : "false") + ",";
   j += "\"freqHz\":" + String(okF ? (f / 100.0f) : -1, 2) + ",";
   j += "\"currentA\":" + String(okI ? (i / 100.0f) : -1, 2) + ",";
   j += "\"voltageV\":" + String(okV ? (v / 10.0f) : -1, 1) + ",";
