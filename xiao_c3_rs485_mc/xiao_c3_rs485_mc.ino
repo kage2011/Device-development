@@ -517,8 +517,8 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   String b1 = String("00") + cmd2;
   String b2 = String("00") + cmd2 + "0";
 
-  if (trySend(b1, false, 180)) return true;
-  if (trySend(b2, false, 180)) return true;
+  if (trySend(b1, false, 10)) return true;
+  if (trySend(b2, false, 10)) return true;
   // keep CR-only per user setting
   return false;
 }
