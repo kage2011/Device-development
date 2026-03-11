@@ -271,6 +271,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <button onclick='readInvAlarms()'>Read Alarms</button>
 <div id='alarms'></div>
 </div>
+</div>
 
 <div id='fabWrap'>
   <button class='fab' onclick='syncTime()'>時刻同期</button>
@@ -323,11 +324,19 @@ async function load(){
   startPolling();
 }
 
+function openInvPage(){
+  invActive=true;
+  mainPage.style.display='none';
+  invCard.style.display='block';
+  invDash.style.display='block';
+}
+
 async function save(){
   let p=new URLSearchParams({mode:mode.value,plcBaud:plcBaud.value,plcFmt:plcFmt.value,invBaud:invBaud.value,invFmt:invFmt.value});
+  if(mode.value==='inv') openInvPage();
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   if(mode.value==='inv') {
-    await readInvNow();
+    setTimeout(()=>{ readInvNow(); }, 80);
   } else {
     await readPlcNow();
     plcCard.scrollIntoView({behavior:'smooth', block:'start'});
@@ -425,10 +434,7 @@ function renderInv(j, updateAlarms){
 function toggleDetail(i){ expandedAlarm[i]=!expandedAlarm[i]; renderAlarms(); }
 
 async function readInvNow(){
-  invActive=true;
-  mainPage.style.display='none';
-  invCard.style.display='block';
-  invDash.style.display='block';
+  openInvPage();
   let r=await fetch('/invread'); let j=await r.json(); renderInv(j,false);
 }
 async function readInvAlarms(){
