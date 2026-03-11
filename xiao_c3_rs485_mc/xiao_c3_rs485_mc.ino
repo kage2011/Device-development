@@ -189,7 +189,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <button onclick='save()'>Save & Apply</button>
 </div>
 
-<div class='card'>
+<div class='card' id='plcCard'>
 <h4>PLC Monitor</h4>
 <div id='plcItems'></div>
 <button onclick='savePlc()'>Save PLC Items</button>
@@ -197,7 +197,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <div id='plcOut' class='small'></div>
 </div>
 
-<div class='card'>
+<div class='card' id='invCard'>
 <h4>INV Dashboard</h4>
 <div id='invKpi'></div>
 <div id='invStatus'></div>
@@ -210,12 +210,18 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <script>
 let timer=null;
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
+function updateModePanels(){
+  const isInv = mode.value==='inv';
+  plcCard.style.display = isInv ? 'none' : 'block';
+  invCard.style.display = isInv ? 'block' : 'none';
+}
 
 async function load(){
   let r=await fetch('/cfg');let j=await r.json();
   mode.value=j.mode;plcBaud.value=j.plcBaud;plcFmt.value=j.plcFmt;invBaud.value=j.invBaud;invFmt.value=j.invFmt;
   let pr=await fetch('/plccfg'); let pj=await pr.json(); plcItems.innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
   st.textContent=JSON.stringify(j,null,2);
+  updateModePanels();
   startPolling();
 }
 
@@ -264,6 +270,7 @@ function startPolling(){
   }, 2000);
 }
 
+mode.addEventListener('change',()=>{ updateModePanels(); startPolling(); });
 load();
 </script></body></html>)HTML";
     g_web.send(200, "text/html", html);
