@@ -214,6 +214,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 <div id='invKpi'></div>
 <div id='invStatus'></div>
 <h5>Alarm History (名称のみ / クリックで詳細)</h5>
+<button onclick='readInvAlarms()'>Read Alarms</button>
 <div id='alarms'></div>
 </div>
 </div>
@@ -288,6 +289,11 @@ async function readInvNow(){
   invActive=true;
   invDash.style.display='block';
   let r=await fetch('/invread'); let j=await r.json(); renderInv(j);
+}
+async function readInvAlarms(){
+  invActive=true;
+  invDash.style.display='block';
+  let r=await fetch('/invalarms'); let j=await r.json(); renderInv(j);
 }
 
 function startPolling(){
@@ -379,6 +385,13 @@ load();
     g_web.send(200, "application/json", j);
   });
 
+  g_web.on("/invalarms", HTTP_GET, []() {
+    if (g_mode != MODE_INV_FRD820) applySerialProfile(MODE_INV_FRD820);
+    refreshInvAlarms();
+    String j = buildInvReadJson();
+    g_web.send(200, "application/json", j);
+  });
+
   g_web.begin();
 }
 
@@ -460,7 +473,7 @@ static bool g_fok=false, g_iok=false, g_vok=false, g_stok=false;
 static uint8_t g_fastIdx=0;
 static uint16_t g_h74=0, g_h75=0, g_h76=0, g_h77=0;
 static bool g_h74ok=false, g_h75ok=false, g_h76ok=false, g_h77ok=false;
-static unsigned long g_alarmCacheMs=0;
+static bool g_alarmInitialized=false;
 
 bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   const uint8_t ENQ = 0x05;
@@ -577,6 +590,14 @@ String invAlarmDetail(uint8_t c) {
   }
 }
 
+void refreshInvAlarms() {
+  g_h74ok = readInverterOnce("74", g_h74);
+  g_h75ok = readInverterOnce("75", g_h75);
+  g_h76ok = readInverterOnce("76", g_h76);
+  g_h77ok = readInverterOnce("77", g_h77);
+  g_alarmInitialized = true;
+}
+
 String buildInvReadJson() {
   // round-robin: one fast register per request (stability first)
   if (g_fastIdx == 0) g_fok  = readInverterOnce("6F", g_f);
@@ -585,21 +606,8 @@ String buildInvReadJson() {
   else g_stok = readInverterOnce("79", g_st);
   g_fastIdx = (g_fastIdx + 1) % 4;
 
-  // Alarm history: one register every 10s window to avoid burst load
-  unsigned long now = millis();
-  if ((now - g_alarmCacheMs > 10000UL) || (!g_h74ok && !g_h75ok && !g_h76ok && !g_h77ok)) {
-    if (!g_h74ok) g_h74ok = readInverterOnce("74", g_h74);
-    else if (!g_h75ok) g_h75ok = readInverterOnce("75", g_h75);
-    else if (!g_h76ok) g_h76ok = readInverterOnce("76", g_h76);
-    else if (!g_h77ok) g_h77ok = readInverterOnce("77", g_h77);
-    else {
-      g_h74ok = readInverterOnce("74", g_h74);
-      g_h75ok = readInverterOnce("75", g_h75);
-      g_h76ok = readInverterOnce("76", g_h76);
-      g_h77ok = readInverterOnce("77", g_h77);
-    }
-    g_alarmCacheMs = now;
-  }
+  // Alarm/history: read only once at first, then on-demand button
+  if (!g_alarmInitialized) refreshInvAlarms();
 
   uint8_t a0 = (uint8_t)(g_h74 & 0x00FF);
   uint8_t a1 = (uint8_t)((g_h74 >> 8) & 0x00FF);
