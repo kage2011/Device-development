@@ -333,7 +333,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
   <h5>Trend</h5>
   <div class='small'>Hz(左軸) + V(右軸)</div>
   <canvas id='hzvChart' width='640' height='180'></canvas>
-  <div class='small'>A(単独)</div>
+  <div class='small'>I</div>
   <canvas id='curChart' width='640' height='160'></canvas>
 </div>
 <h5>Alarm History (名称のみ / クリックで詳細)</h5>
@@ -476,7 +476,7 @@ function drawInvCharts(){
   let c2=cur.getContext('2d');
   c2.fillStyle='#26a69a'; c2.font='12px sans-serif';
   c2.fillText(`${cMax.toFixed(2)} A`,4,16); c2.fillText(`${cMin.toFixed(2)} A`,4,cur.height-6);
-  drawLegend(c2,[{t:'Current(A)',c:'#26a69a'}],cur.width-120,20);
+  drawLegend(c2,[{t:'Current(I)',c:'#26a69a'}],cur.width-120,20);
 }
 function renderAlarms(){
   alarms.innerHTML = lastAlarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:${expandedAlarm[i]?'block':'none'};margin-top:4px'>${a.detail}</div></div>`).join('');
