@@ -486,7 +486,9 @@ async function saveLogSettings(){
     filename: $('logFile').value || '',
     target: $('mode').value
   });
-  await fetch('/logcfg',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  let r = await fetch('/logcfg',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
+  let j = await r.json();
+  alert(`保存設定: enabled=${j.enabled} interval=${j.intervalMs} path=${j.path||'(auto)'}`);
   closeSaveSettings();
 }
 
@@ -563,8 +565,21 @@ load();
     } else {
       g_logPath = ""; // force re-create with start timestamp/custom name
       g_logCfg.lastWriteMs = millis() - g_logCfg.intervalMs; // start immediately
+      maybeWriteCsvLog();
     }
-    g_web.send(200, "text/plain", "OK");
+    String j = String("{\"ok\":true,\"enabled\":") + (g_logCfg.enabled?"true":"false")
+             + ",\"intervalMs\":" + String(g_logCfg.intervalMs)
+             + ",\"target\":\"" + g_logCfg.target + "\""
+             + ",\"path\":\"" + g_logPath + "\"}";
+    g_web.send(200, "application/json", j);
+  });
+
+  g_web.on("/logcfg", HTTP_GET, []() {
+    String j = String("{\"enabled\":") + (g_logCfg.enabled?"true":"false")
+             + ",\"intervalMs\":" + String(g_logCfg.intervalMs)
+             + ",\"target\":\"" + g_logCfg.target + "\""
+             + ",\"path\":\"" + g_logPath + "\"}";
+    g_web.send(200, "application/json", j);
   });
 
   g_web.on("/plccfg", HTTP_GET, []() {
