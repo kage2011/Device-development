@@ -178,6 +178,12 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 .ok{background:#d8f8df}.ng{background:#ffe0e0}
 .alarm{cursor:pointer;padding:8px;border:1px solid #e0e0e0;border-radius:8px;margin:6px 0;background:#fff}
 .small{font-size:12px;color:#667}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(90px,1fr));gap:8px;margin-top:8px}
+.cell{border:1px solid #d8deef;border-radius:8px;padding:8px;text-align:center;background:#f6f8ff}
+.cell .n{font-size:12px;color:#445;display:block;margin-bottom:4px}
+.cell .v{font-weight:700}
+.cell.on{background:#d8f8df;border-color:#98d9a8}
+.cell.off{background:#ffe3e3;border-color:#e6a8a8}
 </style></head>
 <body><h3>RS485COM</h3>
 <div class='card'>
@@ -259,10 +265,19 @@ async function readPlcNow(){
   plcOut.textContent = j.items.map(it=>`#${it.idx+1} D${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
 }
 
-function bit(name,v){return `<span class='badge ${v?'ok':'ng'}'>${name}:${v?'ON':'OFF'}</span>`}
+function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
 function renderInv(j){
   invKpi.innerHTML = `<div class='kpi'>Hz: ${j.freqHz}</div><div class='kpi'>A: ${j.currentA}</div><div class='kpi'>V: ${j.voltageV}</div><div class='kpi'>${j.statusHex}</div>`;
-  invStatus.innerHTML = bit('RUN',j.status.run)+bit('FWD',j.status.fwd)+bit('REV',j.status.rev)+bit('SU',j.status.su)+bit('OL',j.status.ol)+bit('FU',j.status.fu)+bit('ABC',j.status.abc)+bit('ALM',j.status.alm);
+  invStatus.innerHTML = `<div class='grid'>`
+    + bitCell('RUN',j.status.run)
+    + bitCell('FWD',j.status.fwd)
+    + bitCell('REV',j.status.rev)
+    + bitCell('SU',j.status.su)
+    + bitCell('OL',j.status.ol)
+    + bitCell('FU',j.status.fu)
+    + bitCell('ABC',j.status.abc)
+    + bitCell('ALM',j.status.alm)
+    + `</div>`;
   alarms.innerHTML = j.alarms.map((a,i)=>`<div class='alarm' onclick="toggleDetail(${i})"><b>${a.code} ${a.name}</b><div id='d${i}' class='small' style='display:none;margin-top:4px'>${a.detail}</div></div>`).join('');
   window._lastAlarms = j.alarms;
 }
