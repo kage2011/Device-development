@@ -183,7 +183,7 @@ label{display:block;margin-top:8px}input,select,button{font-size:15px;padding:6p
 .cell .n{font-size:12px;color:#445;display:block;margin-bottom:4px}
 .cell .v{font-weight:700}
 .cell.on{background:#d8f8df;border-color:#98d9a8}
-.cell.off{background:#ffe3e3;border-color:#e6a8a8}
+.cell.off{background:#eceff3;border-color:#c5cbd5}
 </style></head>
 <body><h3>RS485COM</h3>
 <div class='card'>
