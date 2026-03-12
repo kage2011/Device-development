@@ -86,8 +86,10 @@ void saveRuntimeConfig() {
   f.println(String("logIntervalMs=") + g_logCfg.intervalMs);
   f.println(String("logFilename=") + g_logCfg.filename);
   f.println(String("logTarget=") + g_logCfg.target);
+  f.flush();
+  size_t sz = f.size();
   f.close();
-  Serial.println("CFG saved /runtime_cfg.txt");
+  Serial.print("CFG saved /runtime_cfg.txt size="); Serial.println((int)sz);
 }
 
 void loadRuntimeConfig() {
@@ -399,6 +401,9 @@ function backToMain(){
 async function load(){
   let r=await fetch('/cfg');let j=await r.json();
   $('mode').value=j.mode; $('plcBaud').value=String(j.plcBaud); $('plcFmt').value=j.plcFmt; $('invBaud').value=String(j.invBaud); $('invFmt').value=j.invFmt;
+  $('logEnable').checked = !!j.logEnabled;
+  $('logInterval').value = String(j.logIntervalMs || 1000);
+  $('logFile').value = j.logFilename || '';
   let pr=await fetch('/plccfg'); let pj=await pr.json(); $('plcItems').innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
   updateModePanels();
   startPolling();
@@ -578,8 +583,21 @@ load();
     j += "\"plcBaud\":" + String(g_plcProfile.baud) + ",";
     j += "\"plcFmt\":\"" + g_plcProfile.fmt + "\",";
     j += "\"invBaud\":" + String(g_invProfile.baud) + ",";
-    j += "\"invFmt\":\"" + g_invProfile.fmt + "\"}";
+    j += "\"invFmt\":\"" + g_invProfile.fmt + "\",";
+    j += "\"logEnabled\":" + String(g_logCfg.enabled?"true":"false") + ",";
+    j += "\"logIntervalMs\":" + String(g_logCfg.intervalMs) + ",";
+    j += "\"logTarget\":\"" + g_logCfg.target + "\",";
+    j += "\"logFilename\":\"" + g_logCfg.filename + "\"}";
     g_web.send(200, "application/json", j);
+  });
+
+  g_web.on("/cfgfile", HTTP_GET, []() {
+    if (!SPIFFS.exists("/runtime_cfg.txt")) { g_web.send(200, "text/plain", "CFG_MISSING"); return; }
+    File f = SPIFFS.open("/runtime_cfg.txt", FILE_READ);
+    if (!f) { g_web.send(500, "text/plain", "CFG_OPEN_NG"); return; }
+    String txt = f.readString();
+    f.close();
+    g_web.send(200, "text/plain", txt);
   });
 
   g_web.on("/set", HTTP_POST, []() {
