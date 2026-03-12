@@ -393,6 +393,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <h4>PLC Dashboard</h4>
 <button onclick='backToMain()'>← Back</button>
 <button onclick='readPlcNow()'>Read PLC</button>
+<div id='plcStatus' class='small'></div>
 <div id='plcOut' class='small'></div>
 </div>
 
@@ -555,7 +556,7 @@ function renderPlcItems(items){
   }).join('');
 }
 async function readPlcNow(){
-  $('plcOut').innerHTML = "<div class='card small'>読み取り中...</div>";
+  $('plcStatus').innerHTML = "<div class='card small'>読み取り中...</div>";
   try{
     const ac = new AbortController();
     const t = setTimeout(()=>ac.abort(), 5000);
@@ -563,8 +564,9 @@ async function readPlcNow(){
     clearTimeout(t);
     let j=await r.json();
     $('plcOut').innerHTML = renderPlcItems(j.items||[]);
+    $('plcStatus').innerHTML = "<div class='card small'>更新: " + new Date().toLocaleTimeString() + "</div>";
   }catch(e){
-    $('plcOut').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
+    $('plcStatus').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
   }
 }
 
