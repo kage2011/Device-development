@@ -1,0 +1,21 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Build / cache
+*.log
+*.tmp
+*.bak
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Large generated artifacts (keep samples manually if needed)
+results/**/espwho_logs/*.txt
+camera_probe/*.txt
