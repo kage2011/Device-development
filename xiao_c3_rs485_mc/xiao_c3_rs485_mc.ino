@@ -31,6 +31,8 @@ struct SerialProfile {
 
 SerialProfile g_plcProfile = {9600, "7O1"};
 SerialProfile g_invProfile = {19200, "8E2"};
+String g_invProto = "clink"; // clink | modbus
+uint16_t g_invUnit = 0;
 
 WebServer g_web(80);
 const char *AP_SSID = "RS485COM_X91";
@@ -76,6 +78,8 @@ void saveRuntimeConfig() {
   f.println(String("plcFmt=") + g_plcProfile.fmt);
   f.println(String("invBaud=") + g_invProfile.baud);
   f.println(String("invFmt=") + g_invProfile.fmt);
+  f.println(String("invProto=") + g_invProto);
+  f.println(String("invUnit=") + g_invUnit);
   for (int i=0;i<5;i++) {
     f.println(String("plc")+i+"_addr="+g_plcItems[i].addr);
     f.println(String("plc")+i+"_view="+g_plcItems[i].view);
@@ -111,6 +115,8 @@ void loadRuntimeConfig() {
     else if (k == "plcFmt") g_plcProfile.fmt = v;
     else if (k == "invBaud") g_invProfile.baud = v.toInt();
     else if (k == "invFmt") g_invProfile.fmt = v;
+    else if (k == "invProto") g_invProto = v;
+    else if (k == "invUnit") g_invUnit = (uint16_t)v.toInt();
     else if (k == "logEnabled") g_logCfg.enabled = (v.toInt() == 1);
     else if (k == "logIntervalMs") g_logCfg.intervalMs = (uint32_t) v.toInt();
     else if (k == "logFilename") g_logCfg.filename = v;
@@ -316,6 +322,8 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <label>PLC Format<select id='plcFmt'><option>7O1</option><option>7E1</option><option>8N1</option><option>8E1</option><option>8O1</option><option>8E2</option></select></label>
 </div>
 <div id='invCfg'>
+<label>通信方式<select id='invProto' onchange='updateInvUnitRange()'><option value='clink'>計算機リンク</option><option value='modbus'>Modbus RTU</option></select></label>
+<label>インバータ号機番号<input id='invUnit' type='number' min='0' max='31' value='0'></label>
 <label>INV Baud<select id='invBaud'><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
 <label>INV Format<select id='invFmt'><option>8E2</option><option>8N1</option><option>8E1</option><option>8O1</option><option>7O1</option><option>7E1</option></select></label>
 </div>
@@ -385,7 +393,15 @@ let lastAlarms=[];
 let expandedAlarm={};
 const $ = (id)=>document.getElementById(id);
 function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
+function updateInvUnitRange(){
+  const isMb = $('invProto').value === 'modbus';
+  $('invUnit').min = isMb ? '1' : '0';
+  $('invUnit').max = isMb ? '247' : '31';
+  if (Number($('invUnit').value) < Number($('invUnit').min)) $('invUnit').value = $('invUnit').min;
+  if (Number($('invUnit').value) > Number($('invUnit').max)) $('invUnit').value = $('invUnit').max;
+}
 function updateModePanels(){
+
   const isInv = $('mode').value==='inv';
   $('plcCard').style.display = isInv ? 'none' : 'block';
   $('plcCfg').style.display = isInv ? 'none' : 'block';
@@ -401,6 +417,9 @@ function backToMain(){
 async function load(){
   let r=await fetch('/cfg');let j=await r.json();
   $('mode').value=j.mode; $('plcBaud').value=String(j.plcBaud); $('plcFmt').value=j.plcFmt; $('invBaud').value=String(j.invBaud); $('invFmt').value=j.invFmt;
+  $('invProto').value=j.invProto || 'clink';
+  $('invUnit').value=String((j.invUnit ?? 0));
+  updateInvUnitRange();
   $('logEnable').checked = !!j.logEnabled;
   $('logInterval').value = String(j.logIntervalMs || 1000);
   $('logFile').value = j.logFilename || '';
@@ -418,7 +437,7 @@ function openInvPage(){
 
 async function save(){
   const m = $('mode').value;
-  let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invFmt:$('invFmt').value});
+  let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invFmt:$('invFmt').value,invProto:$('invProto').value,invUnit:$('invUnit').value});
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   updateModePanels();
   alert('保存されました');
@@ -584,6 +603,8 @@ load();
     j += "\"plcFmt\":\"" + g_plcProfile.fmt + "\",";
     j += "\"invBaud\":" + String(g_invProfile.baud) + ",";
     j += "\"invFmt\":\"" + g_invProfile.fmt + "\",";
+    j += "\"invProto\":\"" + g_invProto + "\",";
+    j += "\"invUnit\":" + String(g_invUnit) + ",";
     j += "\"logEnabled\":" + String(g_logCfg.enabled?"true":"false") + ",";
     j += "\"logIntervalMs\":" + String(g_logCfg.intervalMs) + ",";
     j += "\"logTarget\":\"" + g_logCfg.target + "\",";
@@ -605,6 +626,13 @@ load();
     if (g_web.hasArg("plcFmt")) g_plcProfile.fmt = g_web.arg("plcFmt");
     if (g_web.hasArg("invBaud")) g_invProfile.baud = g_web.arg("invBaud").toInt();
     if (g_web.hasArg("invFmt")) g_invProfile.fmt = g_web.arg("invFmt");
+    if (g_web.hasArg("invProto")) g_invProto = g_web.arg("invProto");
+    if (g_web.hasArg("invUnit")) {
+      int u = g_web.arg("invUnit").toInt();
+      if (g_invProto == "modbus") { if (u < 1) u = 1; if (u > 247) u = 247; }
+      else { if (u < 0) u = 0; if (u > 31) u = 31; }
+      g_invUnit = (uint16_t)u;
+    }
     if (g_web.hasArg("mode") && g_web.arg("mode") == "inv") applySerialProfile(MODE_INV_FRD820);
     else applySerialProfile(MODE_PLC_FX5_1C);
     saveRuntimeConfig();
