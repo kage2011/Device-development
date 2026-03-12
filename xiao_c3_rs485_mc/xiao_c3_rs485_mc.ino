@@ -675,7 +675,12 @@ async function readPlcNow(){
     const msg = j.note ? ('更新: ' + new Date().toLocaleTimeString() + ' / ' + j.note) : ('更新: ' + new Date().toLocaleTimeString());
     $('plcStatus').innerHTML = "<div class='card small'>" + msg + "</div>";
   }catch(e){
-    if (String(e).includes('AbortError')) return; // skip noisy timeout flicker
+    const es = String(e);
+    if (es.includes('AbortError')) return; // skip noisy timeout flicker
+    if (es.includes('TypeError')) {
+      $('plcStatus').innerHTML = "<div class='card small'>通信再試行中... (Wi-Fi/負荷)</div>";
+      return;
+    }
     $('plcStatus').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
   }
 }
@@ -800,13 +805,15 @@ async function saveLogSettings(){
 function startPolling(){
   if(timer){ clearTimeout(timer); timer=null; }
   const tick = async ()=>{
-    if(pollBusy){ timer=setTimeout(tick,1); return; }
+    const isPlcMb = ($('mode').value==='plc' && $('plcProto') && $('plcProto').value==='modbus');
+    const baseMs = isPlcMb ? 30 : 1;
+    if(pollBusy){ timer=setTimeout(tick,baseMs); return; }
     pollBusy = true;
     try{
       if($('mode').value==='plc' && plcActive) await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
-    finally{ pollBusy = false; timer=setTimeout(tick,1); }
+    finally{ pollBusy = false; timer=setTimeout(tick,baseMs); }
   };
   timer=setTimeout(tick,1);
 }
