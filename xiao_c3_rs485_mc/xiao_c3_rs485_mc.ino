@@ -800,7 +800,7 @@ function startPolling(){
     if(pollBusy){ timer=setTimeout(tick,baseMs); return; }
     pollBusy = true;
     try{
-      if($('mode').value==='plc' && plcActive) await readPlcNow();
+      if($('mode').value==='plc') await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; timer=setTimeout(tick,baseMs); }
