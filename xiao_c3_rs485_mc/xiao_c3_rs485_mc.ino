@@ -288,7 +288,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
 
   while (Serial1.available()) Serial1.read();
   rs485TxMode();
-  delayMicroseconds(120);
+  delayMicroseconds(20);
   Serial1.write(ENQ);
   Serial1.print(body);
   Serial1.write(CR);
@@ -298,7 +298,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
   uint8_t raw[96]; size_t n = 0;
   unsigned long t0 = millis();
   bool hasStx = false;
-  while (millis() - t0 < 120 && n < sizeof(raw)) {
+  while (millis() - t0 < 60 && n < sizeof(raw)) {
     if (!Serial1.available()) continue;
     uint8_t c = (uint8_t)Serial1.read();
     raw[n++] = c;
@@ -567,7 +567,7 @@ async function readPlcNow(){
   $('plcStatus').innerHTML = "<div class='card small'>読み取り中...</div>";
   try{
     const ac = new AbortController();
-    const t = setTimeout(()=>ac.abort(), 5000);
+    const t = setTimeout(()=>ac.abort(), 1200);
     let r=await fetch('/plcread',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
