@@ -79,6 +79,9 @@ uint32_t g_plcLastU32[5] = {0,0,0,0,0};
 bool g_plcLastOk[5] = {false,false,false,false,false};
 uint8_t g_plcScanIdx = 0;
 
+void mbPreTx();
+void mbPostTx();
+
 void saveRuntimeConfig() {
   File f = SPIFFS.open("/runtime_cfg.txt", FILE_WRITE);
   if (!f) {
@@ -353,6 +356,44 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
     }
   }
   return false;
+}
+
+bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String &view, uint32_t &u32out) {
+  if (g_plcStation < 1 || g_plcStation > 247) g_plcStation = 1;
+  g_mb.begin((uint8_t)g_plcStation, Serial1);
+  g_mb.preTransmission(mbPreTx);
+  g_mb.postTransmission(mbPostTx);
+  while (Serial1.available()) Serial1.read();
+
+  String d = dev; d.toUpperCase();
+  if (view == "bit") {
+    uint8_t rc = g_mb.readCoils(addr, 1);
+    if (rc != g_mb.ku8MBSuccess) {
+      // fallback: some maps expose bits as holding regs
+      rc = g_mb.readHoldingRegisters(addr, 1);
+      if (rc != g_mb.ku8MBSuccess) return false;
+      u32out = (uint16_t)g_mb.getResponseBuffer(0);
+      return true;
+    }
+    u32out = (g_mb.getResponseBuffer(0) & 0x01) ? 1 : 0;
+    return true;
+  }
+
+  uint8_t rc = g_mb.readHoldingRegisters(addr, words);
+  if (rc != g_mb.ku8MBSuccess) return false;
+  uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
+  if (words >= 2) {
+    uint16_t w2 = (uint16_t)g_mb.getResponseBuffer(1);
+    u32out = ((uint32_t)w2 << 16) | w1;
+  } else {
+    u32out = w1;
+  }
+  return true;
+}
+
+bool plcReadValue(const String &dev, uint16_t addr, uint8_t words, const String &view, uint32_t &u32out) {
+  if (g_plcProto == "modbus") return plcReadModbus(dev, addr, words, view, u32out);
+  return plcReadWords1C(dev, addr, words, u32out);
 }
 
 void maybeWriteCsvLog();
@@ -924,7 +965,7 @@ load();
       uint8_t k = (i + step) % 5;
       uint32_t u = 0;
       uint8_t words = (g_plcItems[k].width == 32) ? 2 : 1;
-      bool ok = plcReadWords1C(g_plcItems[k].dev, g_plcItems[k].addr, words, u);
+      bool ok = plcReadValue(g_plcItems[k].dev, g_plcItems[k].addr, words, g_plcItems[k].view, u);
       g_plcLastOk[k] = ok;
       if (ok) g_plcLastU32[k] = u;
     }
@@ -953,30 +994,13 @@ load();
   g_web.on("/plcread_fast", HTTP_GET, []() {
     if (g_mode != MODE_PLC_FX5_1C) applySerialProfile(MODE_PLC_FX5_1C);
 
-    if (g_plcProto == "modbus") {
-      String j = "{\"items\":[";
-      for (int k = 0; k < 5; k++) {
-        if (k) j += ",";
-        j += "{\"idx\":" + String(k)
-          + ",\"dev\":\"" + g_plcItems[k].dev + "\""
-          + ",\"addr\":" + String(g_plcItems[k].addr)
-          + ",\"view\":\"" + g_plcItems[k].view + "\""
-          + ",\"width\":" + String(g_plcItems[k].width)
-          + ",\"sign\":" + String(g_plcItems[k].sign ? "true" : "false")
-          + "}";
-      }
-      j += "],\"updated\":[],\"note\":\"PLC Modbus read not implemented yet\"}";
-      g_web.send(200, "application/json", j);
-      return;
-    }
-
     uint8_t i = g_plcScanIdx % 5;
     uint8_t ks[2] = { (uint8_t)(i % 5), (uint8_t)((i + 1) % 5) };
     for (int step=0; step<2; step++) {
       uint8_t k = ks[step];
       uint32_t u = 0;
       uint8_t words = (g_plcItems[k].width == 32) ? 2 : 1;
-      bool ok = plcReadWords1C(g_plcItems[k].dev, g_plcItems[k].addr, words, u);
+      bool ok = plcReadValue(g_plcItems[k].dev, g_plcItems[k].addr, words, g_plcItems[k].view, u);
       g_plcLastOk[k] = ok;
       if (ok) g_plcLastU32[k] = u;
     }
