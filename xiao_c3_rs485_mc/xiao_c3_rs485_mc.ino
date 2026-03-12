@@ -298,7 +298,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
   uint8_t raw[96]; size_t n = 0;
   unsigned long t0 = millis();
   bool hasStx = false;
-  while (millis() - t0 < 60 && n < sizeof(raw)) {
+  while (millis() - t0 < 40 && n < sizeof(raw)) {
     if (!Serial1.available()) continue;
     uint8_t c = (uint8_t)Serial1.read();
     raw[n++] = c;
@@ -567,7 +567,7 @@ async function readPlcNow(){
   $('plcStatus').innerHTML = "<div class='card small'>読み取り中...</div>";
   try{
     const ac = new AbortController();
-    const t = setTimeout(()=>ac.abort(), 1200);
+    const t = setTimeout(()=>ac.abort(), 600);
     let r=await fetch('/plcread',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
@@ -696,16 +696,17 @@ async function saveLogSettings(){
 }
 
 function startPolling(){
-  if(timer) clearInterval(timer);
-  timer = setInterval(async ()=>{
-    if(pollBusy) return;
+  if(timer){ clearTimeout(timer); timer=null; }
+  const tick = async ()=>{
+    if(pollBusy){ timer=setTimeout(tick,1); return; }
     pollBusy = true;
     try{
       if($('mode').value==='plc' && plcActive) await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
-    finally{ pollBusy = false; }
-  }, 1);
+    finally{ pollBusy = false; timer=setTimeout(tick,1); }
+  };
+  timer=setTimeout(tick,1);
 }
 
 $('mode').addEventListener('change',()=>{ if($('mode').value==='inv') plcActive=false; updateModePanels(); startPolling(); });
@@ -846,14 +847,17 @@ load();
   g_web.on("/plcread", HTTP_GET, []() {
     applySerialProfile(MODE_PLC_FX5_1C);
 
-    // Fast scan: read one item per request (round-robin), return cached snapshot for all.
+    // Faster scan: read two items per request (round-robin), return cached snapshot for all.
     uint8_t i = g_plcScanIdx % 5;
-    uint32_t u = 0;
-    uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
-    bool ok = plcReadWords1C(g_plcItems[i].dev, g_plcItems[i].addr, words, u);
-    g_plcLastOk[i] = ok;
-    if (ok) g_plcLastU32[i] = u;
-    g_plcScanIdx = (g_plcScanIdx + 1) % 5;
+    for (int step=0; step<2; step++) {
+      uint8_t k = (i + step) % 5;
+      uint32_t u = 0;
+      uint8_t words = (g_plcItems[k].width == 32) ? 2 : 1;
+      bool ok = plcReadWords1C(g_plcItems[k].dev, g_plcItems[k].addr, words, u);
+      g_plcLastOk[k] = ok;
+      if (ok) g_plcLastU32[k] = u;
+    }
+    g_plcScanIdx = (g_plcScanIdx + 2) % 5;
 
     String j = "{\"scanIdx\":" + String(i) + ",\"items\":[";
     for (int k = 0; k < 5; k++) {
