@@ -296,7 +296,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
 
   uint8_t raw[96]; size_t n = 0;
   unsigned long t0 = millis();
-  while (millis() - t0 < 1200 && n < sizeof(raw)) {
+  while (millis() - t0 < 300 && n < sizeof(raw)) {
     if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
   }
 
@@ -518,8 +518,17 @@ async function savePlc(){
 }
 
 async function readPlcNow(){
-  let r=await fetch('/plcread'); let j=await r.json();
-  $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} ${it.dev}${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
+  $('plcOut').textContent = '読み取り中...';
+  try{
+    const ac = new AbortController();
+    const t = setTimeout(()=>ac.abort(), 5000);
+    let r=await fetch('/plcread',{signal:ac.signal});
+    clearTimeout(t);
+    let j=await r.json();
+    $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} ${it.dev}${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
+  }catch(e){
+    $('plcOut').textContent = 'Read PLC失敗: ' + e;
+  }
 }
 
 function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
