@@ -380,14 +380,20 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <h4>PLC Monitor</h4>
 <div id='plcItems'></div>
 <button onclick='savePlc()'>Save PLC Items</button>
-<div id='plcOut' class='small'></div>
 </div>
 
 <div class='card' id='plcBottomActions'>
 <button onclick='save()'>Save & Apply</button>
-<button onclick='readPlcNow()'>Read PLC</button>
+<button onclick='openPlcPage()'>Read PLC</button>
 </div>
 
+</div>
+
+<div class='card' id='plcPage' style='display:none'>
+<h4>PLC Dashboard</h4>
+<button onclick='backToMain()'>← Back</button>
+<button onclick='readPlcNow()'>Read PLC</button>
+<pre id='plcOut' class='small' style='white-space:pre-wrap'></pre>
 </div>
 
 <div class='card' id='invCard' style='display:none'>
@@ -437,6 +443,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 let timer=null;
 let pollBusy=false;
 let invActive=false;
+let plcActive=false;
 let hzHist=[], vHist=[], aHist=[];
 let lastAlarms=[];
 let expandedAlarm={};
@@ -461,15 +468,25 @@ function updateModePanels(){
   $('plcBottomActions').style.display = isInv ? 'none' : 'block';
   $('topActionWrap').style.display = isInv ? 'block' : 'none';
   $('topReadBtn').textContent = isInv ? 'Read INV' : 'Read PLC';
-  if(!isInv){ invActive=false; $('invDash').style.display='none'; $('invCard').style.display='none'; $('mainPage').style.display='block'; }
+  if(!isInv && !plcActive){ invActive=false; $('invDash').style.display='none'; $('invCard').style.display='none'; $('mainPage').style.display='block'; }
 }
 function readNowByMode(){
   if($('mode').value==='inv') readInvNow();
-  else readPlcNow();
+  else openPlcPage();
+}
+function openPlcPage(){
+  plcActive=true;
+  invActive=false;
+  $('mainPage').style.display='none';
+  $('invCard').style.display='none';
+  $('plcPage').style.display='block';
+  readPlcNow();
 }
 function backToMain(){
   invActive=false;
+  plcActive=false;
   $('invCard').style.display='none';
+  $('plcPage').style.display='none';
   $('mainPage').style.display='block';
 }
 
@@ -654,14 +671,14 @@ function startPolling(){
     if(pollBusy) return;
     pollBusy = true;
     try{
-      if($('mode').value==='plc') await readPlcNow();
+      if($('mode').value==='plc' && plcActive) await readPlcNow();
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; }
   }, 100);
 }
 
-$('mode').addEventListener('change',()=>{ updateModePanels(); startPolling(); });
+$('mode').addEventListener('change',()=>{ if($('mode').value==='inv') plcActive=false; updateModePanels(); startPolling(); });
 setInterval(refreshDeviceTime, 2000); refreshDeviceTime();
 load();
 </script></body></html>)HTML";
