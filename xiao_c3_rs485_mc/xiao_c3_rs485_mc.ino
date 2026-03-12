@@ -894,7 +894,10 @@ static uint16_t g_h74=0, g_h75=0, g_h76=0, g_h77=0;
 static bool g_h74ok=false, g_h75ok=false, g_h76ok=false, g_h77ok=false;
 static bool g_alarmInitialized=false;
 
-bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
+void mbPreTx() { rs485TxMode(); delayMicroseconds(120); }
+void mbPostTx() { Serial1.flush(); delayMicroseconds(120); rs485RxMode(); }
+
+bool readInverterOnceClink(const char *cmd2, uint16_t &valueOut) {
   const uint8_t ENQ = 0x05;
   const uint8_t CR = 0x0D;
   const uint8_t LF = 0x0A;
@@ -961,7 +964,10 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   };
 
   // command read patterns: station + cmd (+ optional wait)
-  String b2 = String("00") + cmd2 + "0";
+  uint8_t st = (uint8_t)g_invUnit;
+  if (st > 0x1F) st = 0; // clink practical range guard
+  char stHex[3]; snprintf(stHex, sizeof(stHex), "%02X", st);
+  String b2 = String(stHex) + cmd2 + "0";
 
   for (int r = 0; r < 3; r++) {
     if (trySend(b2, false, 250)) return true;
@@ -969,6 +975,30 @@ bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
   }
   // keep CR-only per user setting
   return false;
+}
+
+bool readInverterOnceModbus(const char *cmd2, uint16_t &valueOut) {
+  uint16_t reg = (uint16_t)strtoul(cmd2, nullptr, 16);
+  if (g_invUnit < 1 || g_invUnit > 247) g_invUnit = 1;
+  g_mb.begin((uint8_t)g_invUnit, Serial1);
+  g_mb.preTransmission(mbPreTx);
+  g_mb.postTransmission(mbPostTx);
+  // clear stale bytes
+  while (Serial1.available()) Serial1.read();
+  uint8_t rc = g_mb.readHoldingRegisters(reg, 1);
+  if (rc == g_mb.ku8MBSuccess) {
+    valueOut = g_mb.getResponseBuffer(0);
+    Serial.print("MB reg=0x"); Serial.print(reg, HEX);
+    Serial.print(" val=0x"); Serial.println(valueOut, HEX);
+    return true;
+  }
+  Serial.print("MB NG rc="); Serial.println(rc);
+  return false;
+}
+
+bool readInverterOnce(const char *cmd2, uint16_t &valueOut) {
+  if (g_invProto == "modbus") return readInverterOnceModbus(cmd2, valueOut);
+  return readInverterOnceClink(cmd2, valueOut);
 }
 
 String invAlarmCodeName(uint8_t c) {
