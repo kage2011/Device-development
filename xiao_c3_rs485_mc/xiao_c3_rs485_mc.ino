@@ -453,7 +453,8 @@ let timer=null;
 let pollBusy=false;
 let invActive=false;
 let plcActive=false;
-let plcLastHtml='';
+let plcCfgItems=[];
+let plcDashInited=false;
 let hzHist=[], vHist=[], aHist=[];
 let lastAlarms=[];
 let expandedAlarm={};
@@ -487,6 +488,7 @@ function readNowByMode(){
 function openPlcPage(){
   plcActive=true;
   invActive=false;
+  plcDashInited=false;
   $('mainPage').style.display='none';
   $('invCard').style.display='none';
   $('plcPage').style.display='block';
@@ -512,7 +514,7 @@ async function load(){
   $('logEnable').checked = !!j.logEnabled;
   $('logInterval').value = String(j.logIntervalMs || 1000);
   $('logFile').value = j.logFilename || '';
-  let pr=await fetch('/plccfg'); let pj=await pr.json(); $('plcItems').innerHTML=pj.items.map((it,i)=>row(i,it)).join('');
+  let pr=await fetch('/plccfg'); let pj=await pr.json(); plcCfgItems=pj.items||[]; $('plcItems').innerHTML=plcCfgItems.map((it,i)=>row(i,it)).join('');
   updateModePanels();
   startPolling();
 }
@@ -546,40 +548,56 @@ async function savePlc(){
   await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
-function plcBitGrid16(v){
+function plcBitGrid16ById(id,v){
   let h = `<div class='grid' style='grid-template-columns:repeat(8,minmax(38px,1fr));'>`;
   for(let b=15;b>=0;b--){
     const on = ((v>>>b)&1)===1;
-    h += `<div class='cell ${on?'on':'off'}' style='padding:6px'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
+    h += `<div id='bit_${id}_${b}' class='cell ${on?'on':'off'}' style='padding:6px'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
   }
   h += `</div>`;
   return h;
 }
-function renderPlcItems(items){
-  return items.map(it=>{
+function renderPlcSkeleton(items){
+  $('plcOut').innerHTML = items.map(it=>{
     const isBit = String(it.view||'word')==='bit';
     const signLabel = it.sign ? 'sign' : 'unsign';
-    const head = `<div class='small'>#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}/${signLabel}) ${it.ok?'OK':'NG'}</div>`;
-    if(!it.ok) return `<div class='card'>${head}<div class='small'>読取失敗</div></div>`;
+    const head = `#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}/${signLabel}) --`;
     if(isBit){
-      return `<div class='card'>${head}${plcBitGrid16(Number(it.u32)||0)}</div>`;
+      return `<div class='card'><div id='head_${it.idx}' class='small'>${head}</div>${plcBitGrid16ById(it.idx,0)}</div>`;
     }
-    const val = it.sign ? it.s32 : it.u32;
-    return `<div class='card'>${head}<div class='kpi'>${val}</div></div>`;
+    return `<div class='card'><div id='head_${it.idx}' class='small'>${head}</div><div id='val_${it.idx}' class='kpi'>-</div></div>`;
   }).join('');
+  plcDashInited = true;
+}
+function applyPlcItemUpdate(it){
+  const isBit = String(it.view||'word')==='bit';
+  const signLabel = it.sign ? 'sign' : 'unsign';
+  const h = document.getElementById('head_'+it.idx);
+  if(h) h.textContent = `#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}/${signLabel}) ${it.ok?'OK':'NG'}`;
+  if(!it.ok) return;
+  if(isBit){
+    const v = Number(it.u32)||0;
+    for(let b=15;b>=0;b--){
+      const el = document.getElementById(`bit_${it.idx}_${b}`);
+      if(!el) continue;
+      const on = ((v>>>b)&1)===1;
+      el.className = `cell ${on?'on':'off'}`;
+      const vv = el.querySelector('.v'); if(vv) vv.textContent = on?'1':'0';
+    }
+  }else{
+    const val = it.sign ? it.s32 : it.u32;
+    const el = document.getElementById('val_'+it.idx); if(el) el.textContent = String(val);
+  }
 }
 async function readPlcNow(){
   try{
     const ac = new AbortController();
     const t = setTimeout(()=>ac.abort(), 600);
-    let r=await fetch('/plcread',{signal:ac.signal});
+    let r=await fetch('/plcread_fast',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
-    const html = renderPlcItems(j.items||[]);
-    if (html !== plcLastHtml) {
-      $('plcOut').innerHTML = html;
-      plcLastHtml = html;
-    }
+    if(!plcDashInited) renderPlcSkeleton(j.items||[]);
+    (j.updated||[]).forEach(applyPlcItemUpdate);
     $('plcStatus').innerHTML = "<div class='card small'>更新: " + new Date().toLocaleTimeString() + "</div>";
   }catch(e){
     $('plcStatus').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
@@ -870,6 +888,53 @@ load();
     String j = "{\"scanIdx\":" + String(i) + ",\"items\":[";
     for (int k = 0; k < 5; k++) {
       if (k) j += ",";
+      uint32_t cu = g_plcLastU32[k];
+      bool cok = g_plcLastOk[k];
+      j += "{\"idx\":" + String(k)
+        + ",\"dev\":\"" + g_plcItems[k].dev + "\""
+        + ",\"addr\":" + String(g_plcItems[k].addr)
+        + ",\"view\":\"" + g_plcItems[k].view + "\""
+        + ",\"width\":" + String(g_plcItems[k].width)
+        + ",\"sign\":" + String(g_plcItems[k].sign ? "true" : "false")
+        + ",\"ok\":" + String(cok ? "true" : "false")
+        + ",\"u32\":" + String(cu)
+        + ",\"s32\":" + String((int32_t)cu)
+        + "}";
+    }
+    j += "]}";
+    g_web.send(200, "application/json", j);
+  });
+
+  g_web.on("/plcread_fast", HTTP_GET, []() {
+    if (g_mode != MODE_PLC_FX5_1C) applySerialProfile(MODE_PLC_FX5_1C);
+
+    uint8_t i = g_plcScanIdx % 5;
+    uint8_t ks[2] = { (uint8_t)(i % 5), (uint8_t)((i + 1) % 5) };
+    for (int step=0; step<2; step++) {
+      uint8_t k = ks[step];
+      uint32_t u = 0;
+      uint8_t words = (g_plcItems[k].width == 32) ? 2 : 1;
+      bool ok = plcReadWords1C(g_plcItems[k].dev, g_plcItems[k].addr, words, u);
+      g_plcLastOk[k] = ok;
+      if (ok) g_plcLastU32[k] = u;
+    }
+    g_plcScanIdx = (g_plcScanIdx + 2) % 5;
+
+    String j = "{\"items\":[";
+    for (int k = 0; k < 5; k++) {
+      if (k) j += ",";
+      j += "{\"idx\":" + String(k)
+        + ",\"dev\":\"" + g_plcItems[k].dev + "\""
+        + ",\"addr\":" + String(g_plcItems[k].addr)
+        + ",\"view\":\"" + g_plcItems[k].view + "\""
+        + ",\"width\":" + String(g_plcItems[k].width)
+        + ",\"sign\":" + String(g_plcItems[k].sign ? "true" : "false")
+        + "}";
+    }
+    j += "],\"updated\":[";
+    for (int n = 0; n < 2; n++) {
+      int k = ks[n];
+      if (n) j += ",";
       uint32_t cu = g_plcLastU32[k];
       bool cok = g_plcLastOk[k];
       j += "{\"idx\":" + String(k)
