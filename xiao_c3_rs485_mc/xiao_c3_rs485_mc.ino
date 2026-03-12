@@ -393,7 +393,6 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div class='card' id='plcPage' style='display:none'>
 <h4>PLC Dashboard</h4>
 <button onclick='backToMain()'>← Back</button>
-<button onclick='readPlcNow()'>Read PLC</button>
 <div id='plcStatus' class='small'></div>
 <div id='plcOut' class='small'></div>
 </div>
