@@ -45,6 +45,7 @@ RTC_DS3231 rtc;
 const int SD_CS_PIN = 5;
 
 struct PlcItem {
+  String dev;    // D|X|Y
   uint16_t addr;
   String view;   // word|bit
   uint8_t width; // 16|32
@@ -52,11 +53,11 @@ struct PlcItem {
 };
 
 PlcItem g_plcItems[5] = {
-  {0, "word", 16, false},
-  {10, "word", 16, false},
-  {20, "word", 16, false},
-  {30, "word", 16, false},
-  {40, "word", 32, false},
+  {"D", 0, "word", 16, false},
+  {"D", 10, "word", 16, false},
+  {"D", 20, "word", 16, false},
+  {"D", 30, "word", 16, false},
+  {"D", 40, "word", 32, false},
 };
 
 struct LogConfig {
@@ -89,6 +90,7 @@ void saveRuntimeConfig() {
   f.println(String("invParity=") + String(g_invParity));
   f.println(String("invStopBits=") + g_invStopBits);
   for (int i=0;i<5;i++) {
+    f.println(String("plc")+i+"_dev="+g_plcItems[i].dev);
     f.println(String("plc")+i+"_addr="+g_plcItems[i].addr);
     f.println(String("plc")+i+"_view="+g_plcItems[i].view);
     f.println(String("plc")+i+"_width="+g_plcItems[i].width);
@@ -134,7 +136,8 @@ void loadRuntimeConfig() {
     else if (k == "logTarget") g_logCfg.target = v;
     else {
       for (int i=0;i<5;i++) {
-        if (k == String("plc")+i+"_addr") g_plcItems[i].addr = (uint16_t)v.toInt();
+        if (k == String("plc")+i+"_dev") g_plcItems[i].dev = v;
+        else if (k == String("plc")+i+"_addr") g_plcItems[i].addr = (uint16_t)v.toInt();
         else if (k == String("plc")+i+"_view") g_plcItems[i].view = v;
         else if (k == String("plc")+i+"_width") g_plcItems[i].width = (uint8_t)v.toInt();
         else if (k == String("plc")+i+"_sign") g_plcItems[i].sign = (v.toInt() == 1);
@@ -359,16 +362,22 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <label>パリティ<select id='invParity'><option value='N'>None</option><option value='E' selected>Even</option><option value='O'>Odd</option></select></label>
 <label>ストップビット<select id='invStopBits'><option value='1'>1</option><option value='2' selected>2</option></select></label>
 </div>
+<div id='topActionWrap'>
 <button onclick='save()'>Save & Apply</button>
-<button onclick='readInvNow()'>Read INV</button>
+<button id='topReadBtn' onclick='readNowByMode()'>Read INV</button>
+</div>
 </div>
 
 <div class='card' id='plcCard'>
 <h4>PLC Monitor</h4>
 <div id='plcItems'></div>
 <button onclick='savePlc()'>Save PLC Items</button>
-<button onclick='readPlcNow()'>Read PLC</button>
 <div id='plcOut' class='small'></div>
+</div>
+
+<div class='card' id='plcBottomActions'>
+<button onclick='save()'>Save & Apply</button>
+<button onclick='readPlcNow()'>Read PLC</button>
 </div>
 
 </div>
@@ -424,7 +433,7 @@ let hzHist=[], vHist=[], aHist=[];
 let lastAlarms=[];
 let expandedAlarm={};
 const $ = (id)=>document.getElementById(id);
-function row(i,it){return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
+function row(i,it){const d=(it.dev||'D');return `<div style="border:1px solid #ddd;padding:6px;margin:6px 0">#${i+1} Dev:<select id='d${i}'><option ${d==='D'?'selected':''}>D</option><option ${d==='X'?'selected':''}>X</option><option ${d==='Y'?'selected':''}>Y</option></select> Addr:<input id='a${i}' type='number' value='${it.addr}' style='width:90px'> View:<select id='v${i}'><option ${it.view==='word'?'selected':''}>word</option><option ${it.view==='bit'?'selected':''}>bit</option></select> Width:<select id='w${i}'><option ${it.width==16?'selected':''}>16</option><option ${it.width==32?'selected':''}>32</option></select> Signed:<select id='s${i}'><option value='0' ${!it.sign?'selected':''}>no</option><option value='1' ${it.sign?'selected':''}>yes</option></select></div>`}
 function updateInvParamView(){
   const isMb = $('invProto').value === 'modbus';
   $('invUnit').min = isMb ? '1' : '0';
@@ -441,7 +450,14 @@ function updateModePanels(){
   $('plcCard').style.display = isInv ? 'none' : 'block';
   $('plcCfg').style.display = isInv ? 'none' : 'block';
   $('invCfg').style.display = isInv ? 'block' : 'none';
+  $('plcBottomActions').style.display = isInv ? 'none' : 'block';
+  $('topActionWrap').style.display = isInv ? 'block' : 'none';
+  $('topReadBtn').textContent = isInv ? 'Read INV' : 'Read PLC';
   if(!isInv){ invActive=false; $('invDash').style.display='none'; $('invCard').style.display='none'; $('mainPage').style.display='block'; }
+}
+function readNowByMode(){
+  if($('mode').value==='inv') readInvNow();
+  else readPlcNow();
 }
 function backToMain(){
   invActive=false;
@@ -484,6 +500,7 @@ async function save(){
 async function savePlc(){
   let p=new URLSearchParams();
   for(let i=0;i<5;i++){
+    p.append('dev'+i,document.getElementById('d'+i).value);
     p.append('addr'+i,document.getElementById('a'+i).value);
     p.append('view'+i,document.getElementById('v'+i).value);
     p.append('width'+i,document.getElementById('w'+i).value);
@@ -494,7 +511,7 @@ async function savePlc(){
 
 async function readPlcNow(){
   let r=await fetch('/plcread'); let j=await r.json();
-  $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} D${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
+  $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} ${it.dev}${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
 }
 
 function bitCell(name,v){return `<div class='cell ${v?'on':'off'}'><span class='n'>${name}</span><span class='v'>${v?'ON':'OFF'}</span></div>`}
@@ -738,7 +755,8 @@ load();
     String j = "{\"items\":[";
     for (int i = 0; i < 5; i++) {
       if (i) j += ",";
-      j += "{\"addr\":" + String(g_plcItems[i].addr)
+      j += "{\"dev\":\"" + g_plcItems[i].dev + "\""
+        + ",\"addr\":" + String(g_plcItems[i].addr)
         + ",\"view\":\"" + g_plcItems[i].view + "\""
         + ",\"width\":" + String(g_plcItems[i].width)
         + ",\"sign\":" + String(g_plcItems[i].sign ? "true" : "false")
@@ -750,7 +768,8 @@ load();
 
   g_web.on("/plcset", HTTP_POST, []() {
     for (int i = 0; i < 5; i++) {
-      String kA = "addr" + String(i), kV = "view" + String(i), kW = "width" + String(i), kS = "sign" + String(i);
+      String kD = "dev" + String(i), kA = "addr" + String(i), kV = "view" + String(i), kW = "width" + String(i), kS = "sign" + String(i);
+      if (g_web.hasArg(kD)) g_plcItems[i].dev = g_web.arg(kD);
       if (g_web.hasArg(kA)) g_plcItems[i].addr = (uint16_t)g_web.arg(kA).toInt();
       if (g_web.hasArg(kV)) g_plcItems[i].view = g_web.arg(kV);
       if (g_web.hasArg(kW)) g_plcItems[i].width = (uint8_t)g_web.arg(kW).toInt();
@@ -766,11 +785,18 @@ load();
     for (int i = 0; i < 5; i++) {
       uint32_t u = 0;
       uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
-      bool ok = plcReadWords1C(g_plcItems[i].addr, words, u);
+      bool ok = false;
+      if (g_plcItems[i].dev == "D") {
+        ok = plcReadWords1C(g_plcItems[i].addr, words, u);
+      } else {
+        // X/Y read path is UI-ready; backend acquisition keeps D-only for now.
+        ok = false;
+      }
       g_plcLastOk[i] = ok;
       g_plcLastU32[i] = u;
       if (i) j += ",";
       j += "{\"idx\":" + String(i)
+        + ",\"dev\":\"" + g_plcItems[i].dev + "\""
         + ",\"addr\":" + String(g_plcItems[i].addr)
         + ",\"ok\":" + String(ok ? "true" : "false")
         + ",\"u32\":" + String(u)
