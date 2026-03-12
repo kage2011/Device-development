@@ -1662,19 +1662,6 @@ void loop() {
   g_web.handleClient();
   maybeWriteCsvLog();
 
-  // Force PLC traffic periodically in PLC mode (debug keepalive)
-  static unsigned long plcKickMs = 0;
-  if (g_mode == MODE_PLC_FX5_1C && millis() - plcKickMs >= 120) {
-    plcKickMs = millis();
-    uint8_t k = g_plcScanIdx % 5;
-    uint32_t u = 0;
-    uint8_t words = (g_plcItems[k].width == 32) ? 2 : 1;
-    bool ok = plcReadValue(g_plcItems[k].dev, g_plcItems[k].addr, words, g_plcItems[k].view, u);
-    g_plcLastOk[k] = ok;
-    if (ok) g_plcLastU32[k] = u;
-    g_plcScanIdx = (g_plcScanIdx + 1) % 5;
-  }
-
   if (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
