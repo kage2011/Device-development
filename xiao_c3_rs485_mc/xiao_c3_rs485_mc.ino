@@ -67,7 +67,10 @@ bool g_plcLastOk[5] = {false,false,false,false,false};
 
 void saveRuntimeConfig() {
   File f = SPIFFS.open("/runtime_cfg.txt", FILE_WRITE);
-  if (!f) return;
+  if (!f) {
+    Serial.println("CFG save NG");
+    return;
+  }
   f.println(String("mode=") + (g_mode == MODE_INV_FRD820 ? "inv" : "plc"));
   f.println(String("plcBaud=") + g_plcProfile.baud);
   f.println(String("plcFmt=") + g_plcProfile.fmt);
@@ -84,10 +87,14 @@ void saveRuntimeConfig() {
   f.println(String("logFilename=") + g_logCfg.filename);
   f.println(String("logTarget=") + g_logCfg.target);
   f.close();
+  Serial.println("CFG saved /runtime_cfg.txt");
 }
 
 void loadRuntimeConfig() {
-  if (!SPIFFS.exists("/runtime_cfg.txt")) return;
+  if (!SPIFFS.exists("/runtime_cfg.txt")) {
+    Serial.println("CFG not found");
+    return;
+  }
   File f = SPIFFS.open("/runtime_cfg.txt", FILE_READ);
   if (!f) return;
   while (f.available()) {
@@ -116,6 +123,7 @@ void loadRuntimeConfig() {
     }
   }
   f.close();
+  Serial.println("CFG loaded /runtime_cfg.txt");
 }
 
 uint32_t toSerialConfig(const String &fmt) {
@@ -758,8 +766,13 @@ void setup() {
   pinMode(PIN_DE, OUTPUT);
   rs485RxMode();
 
-  SPIFFS.begin(true);
-  loadRuntimeConfig();
+  bool fsok = SPIFFS.begin(false);
+  if (!fsok) {
+    Serial.println("SPIFFS mount NG -> format");
+    fsok = SPIFFS.begin(true);
+  }
+  if (fsok) loadRuntimeConfig();
+  else Serial.println("SPIFFS unavailable");
   applySerialProfile(g_mode);
   Wire.begin();
   if (!rtc.begin()) {
