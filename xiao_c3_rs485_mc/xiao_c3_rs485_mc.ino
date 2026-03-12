@@ -462,7 +462,6 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
 <div id='plcCfg'>
 <label>通信方式<select id='plcProto' onchange='updatePlcParamView()'><option value='mc'>MCプロトコル</option><option value='modbus'>Modbus RTU</option></select></label>
-<button id='plcScanBtn' onclick='scanPlcModbus()' style='display:none'>Modbus局番スキャン(1-32)</button>
 <label>PLC Baud<select id='plcBaud'><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
 <label>データ長<select id='plcDataBits'><option value='7' selected>7</option><option value='8'>8</option></select></label>
 <label>パリティ<select id='plcParity'><option value='N'>None</option><option value='E'>Even</option><option value='O' selected>Odd</option></select></label>
@@ -571,17 +570,6 @@ function updatePlcParamView(){
   const isMb = $('plcProto').value === 'modbus';
   $('plcDataBits').value = isMb ? '8' : $('plcDataBits').value;
   $('plcDataBits').disabled = isMb;
-  $('plcScanBtn').style.display = isMb ? 'inline-block' : 'none';
-}
-async function scanPlcModbus(){
-  $('plcStatus').innerHTML = "<div class='card small'>Modbus局番スキャン中...</div>";
-  try{
-    let r = await fetch('/plcscan');
-    let j = await r.json();
-    $('plcStatus').innerHTML = `<div class='card small'>scan: found=${j.found} station=${j.station} rc=${j.rc}</div>`;
-  }catch(e){
-    $('plcStatus').innerHTML = `<div class='card small'>scan失敗: ${e}</div>`;
-  }
 }
 function updateModePanels(){
 
@@ -996,28 +984,6 @@ load();
     }
     saveRuntimeConfig();
     g_web.send(200, "text/plain", "OK");
-  });
-
-  g_web.on("/plcscan", HTTP_GET, []() {
-    if (g_mode != MODE_PLC_FX5_1C) applySerialProfile(MODE_PLC_FX5_1C);
-    uint8_t found = 0;
-    uint8_t lastRc = 0xFF;
-    for (uint8_t st=1; st<=32; st++) {
-      g_mb.begin(st, Serial1);
-      g_mb.preTransmission(mbPreTx);
-      g_mb.postTransmission(mbPostTx);
-      while (Serial1.available()) Serial1.read();
-      uint8_t rc = g_mb.readHoldingRegisters(0, 1);
-      lastRc = rc;
-      if (rc == g_mb.ku8MBSuccess) { found = st; break; }
-      delay(2);
-    }
-    if (found) {
-      g_plcStation = found;
-      saveRuntimeConfig();
-    }
-    String j = String("{\"found\":") + (found?"true":"false") + ",\"station\":" + String(found) + ",\"rc\":" + String(lastRc) + "}";
-    g_web.send(200, "application/json", j);
   });
 
   g_web.on("/plcread", HTTP_GET, []() {
