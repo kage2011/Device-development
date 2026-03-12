@@ -564,7 +564,6 @@ function renderPlcItems(items){
   }).join('');
 }
 async function readPlcNow(){
-  $('plcStatus').innerHTML = "<div class='card small'>読み取り中...</div>";
   try{
     const ac = new AbortController();
     const t = setTimeout(()=>ac.abort(), 600);
