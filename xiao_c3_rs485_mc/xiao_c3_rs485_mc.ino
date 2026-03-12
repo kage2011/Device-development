@@ -665,7 +665,8 @@ function applyPlcItemUpdate(it){
 async function readPlcNow(){
   try{
     const ac = new AbortController();
-    const t = setTimeout(()=>ac.abort(), 600);
+    const isPlcMb = $('plcProto') && $('plcProto').value==='modbus';
+    const t = setTimeout(()=>ac.abort(), isPlcMb ? 1500 : 600);
     let r=await fetch('/plcread_fast',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
@@ -674,6 +675,7 @@ async function readPlcNow(){
     const msg = j.note ? ('更新: ' + new Date().toLocaleTimeString() + ' / ' + j.note) : ('更新: ' + new Date().toLocaleTimeString());
     $('plcStatus').innerHTML = "<div class='card small'>" + msg + "</div>";
   }catch(e){
+    if (String(e).includes('AbortError')) return; // skip noisy timeout flicker
     $('plcStatus').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
   }
 }
