@@ -297,8 +297,16 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
 
   uint8_t raw[96]; size_t n = 0;
   unsigned long t0 = millis();
+  bool hasStx = false;
   while (millis() - t0 < 120 && n < sizeof(raw)) {
-    if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
+    if (!Serial1.available()) continue;
+    uint8_t c = (uint8_t)Serial1.read();
+    raw[n++] = c;
+    if (c == 0x02) hasStx = true;              // STX
+    if (hasStx && c == 0x03) break;            // ETX
+    if (!hasStx && c == 0x15) break;           // NAK
+    if (c == 0x06) break;                      // ACK only response
+    if (c == 0x0D) break;                      // CR terminator
   }
 
   if (n >= 10 && raw[0] == 0x02 && raw[1] == '0' && raw[2] == '0' && raw[3] == 'F' && raw[4] == 'F') {
