@@ -309,6 +309,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
   char body[40];
   uint8_t st = (uint8_t)(g_plcStation & 0xFF);
   snprintf(body, sizeof(body), "%02XFFWR0%s%s%02X", st, d.c_str(), a, words);
+  Serial.print("PLC1C TX body="); Serial.println(body);
 
   while (Serial1.available()) Serial1.read();
   rs485TxMode();
@@ -367,6 +368,7 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
 
   String d = dev; d.toUpperCase();
   if (view == "bit") {
+    Serial.print("PLCMB TX coil addr="); Serial.print(addr); Serial.print(" st="); Serial.println(g_plcStation);
     uint8_t rc = g_mb.readCoils(addr, 1);
     if (rc != g_mb.ku8MBSuccess) {
       // fallback: some maps expose bits as holding regs
@@ -379,6 +381,7 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
     return true;
   }
 
+  Serial.print("PLCMB TX hold addr="); Serial.print(addr); Serial.print(" words="); Serial.print(words); Serial.print(" st="); Serial.println(g_plcStation);
   uint8_t rc = g_mb.readHoldingRegisters(addr, words);
   if (rc != g_mb.ku8MBSuccess) return false;
   uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
@@ -991,6 +994,7 @@ load();
   });
 
   g_web.on("/plcread_fast", HTTP_GET, []() {
+    Serial.println("HTTP /plcread_fast");
     if (g_mode != MODE_PLC_FX5_1C) applySerialProfile(MODE_PLC_FX5_1C);
 
     uint8_t i = g_plcScanIdx % 5;
