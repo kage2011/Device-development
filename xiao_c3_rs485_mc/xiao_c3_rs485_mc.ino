@@ -555,12 +555,14 @@ function plcBitGrid16(v){
 function renderPlcItems(items){
   return items.map(it=>{
     const isBit = String(it.view||'word')==='bit';
-    const head = `<div class='small'>#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}) ${it.ok?'OK':'NG'}</div>`;
+    const signLabel = it.sign ? 'sign' : 'unsign';
+    const head = `<div class='small'>#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}/${signLabel}) ${it.ok?'OK':'NG'}</div>`;
     if(!it.ok) return `<div class='card'>${head}<div class='small'>読取失敗</div></div>`;
     if(isBit){
       return `<div class='card'>${head}${plcBitGrid16(Number(it.u32)||0)}</div>`;
     }
-    return `<div class='card'>${head}<div class='kpi'>u32: ${it.u32}</div><div class='kpi'>s32: ${it.s32}</div></div>`;
+    const val = it.sign ? it.s32 : it.u32;
+    return `<div class='card'>${head}<div class='kpi'>${val}</div></div>`;
   }).join('');
 }
 async function readPlcNow(){
@@ -868,6 +870,7 @@ load();
         + ",\"addr\":" + String(g_plcItems[k].addr)
         + ",\"view\":\"" + g_plcItems[k].view + "\""
         + ",\"width\":" + String(g_plcItems[k].width)
+        + ",\"sign\":" + String(g_plcItems[k].sign ? "true" : "false")
         + ",\"ok\":" + String(cok ? "true" : "false")
         + ",\"u32\":" + String(cu)
         + ",\"s32\":" + String((int32_t)cu)
