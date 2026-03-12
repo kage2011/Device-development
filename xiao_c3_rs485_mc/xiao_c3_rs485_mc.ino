@@ -40,7 +40,7 @@ uint8_t g_invStopBits = 2;
 ModbusMaster g_mb;
 
 WebServer g_web(80);
-const char *AP_SSID = "RS485COM_X91";
+const char *AP_SSID = "RS485COM_X92";
 RTC_DS3231 rtc;
 const int SD_CS_PIN = 5;
 
@@ -354,7 +354,7 @@ button{background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;color:#fff
 .cell.off .v{color:#f3f4f6}
 canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border-radius:8px;margin:6px 0}
 </style></head>
-<body><h3>RS485COM <span class='small'>v20260311b</span></h3>
+<body><h3>RS485COM <span class='small'>v20260312c</span></h3>
 <div id='mainPage'>
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
@@ -911,7 +911,7 @@ void setup() {
   Serial.print("AP IP: "); Serial.println(WiFi.softAPIP());
 
   Serial.println("xiao_c3_rs485_mc ready");
-  Serial.println("BUILD_TAG=X91");
+  Serial.println("BUILD_TAG=X92");
   Serial.println("type: read3e / read1e / readasc / read1c / readinv");
   Serial.println("type: setproto plc / setproto inv / proto");
 }
