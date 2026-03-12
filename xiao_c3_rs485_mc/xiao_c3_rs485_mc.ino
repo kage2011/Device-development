@@ -221,7 +221,13 @@ void applySerialProfile(ProtoMode mode) {
   Serial1.end();
   if (mode == MODE_PLC_FX5_1C) {
     if (g_plcProto == "modbus") { g_plcDataBits = 8; g_plcStation = 1; } // manual: 1..247, avoid 0 broadcast
-    else g_plcStation = 0; // MC fixed
+    else {
+      g_plcStation = 0;      // MC fixed
+      g_plcDataBits = 7;     // MC recommended fixed profile
+      g_plcParity = 'O';
+      g_plcStopBits = 1;
+      if (g_plcProfile.baud <= 0) g_plcProfile.baud = 9600;
+    }
     String plcFmt = makeInvFmt(g_plcDataBits, g_plcParity, g_plcStopBits);
     Serial1.begin(g_plcProfile.baud, toSerialConfig(plcFmt), PIN_RX, PIN_TX);
     Serial.print("profile=plc (");
