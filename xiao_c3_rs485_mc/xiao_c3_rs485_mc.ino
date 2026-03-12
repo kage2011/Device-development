@@ -187,7 +187,7 @@ void ensureLogFile() {
         f.println("ts,freq_hz,current_a,voltage_v,status_hex");
       } else {
         f.print("ts");
-        for (int i=0;i<5;i++) { f.print(",D"); f.print(g_plcItems[i].addr); }
+        for (int i=0;i<5;i++) { f.print(","); f.print(g_plcItems[i].dev); f.print(g_plcItems[i].addr); }
         f.println();
       }
       f.close();
@@ -270,12 +270,20 @@ size_t buildReadD2000Frame(uint8_t *out) {
   return sizeof(frame);
 }
 
-bool plcReadWords1C(uint16_t dAddr, uint8_t words, uint32_t &u32out) {
+bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u32out) {
   const uint8_t ENQ = 0x05;
   const uint8_t CR  = 0x0D;
 
-  char body[32];
-  snprintf(body, sizeof(body), "00FFWR0D%04u%02X", dAddr, words);
+  String d = dev;
+  d.toUpperCase();
+  if (!(d=="D"||d=="X"||d=="Y"||d=="M"||d=="L"||d=="F"||d=="V"||d=="B"||d=="W"||d=="R"||d=="ZR"||d=="S"||d=="T"||d=="C"||d=="TN"||d=="CN")) d = "D";
+
+  char a[8];
+  if (d == "X" || d == "Y") snprintf(a, sizeof(a), "%04o", addr); // format-1 X/Y are octal
+  else snprintf(a, sizeof(a), "%04u", addr);
+
+  char body[40];
+  snprintf(body, sizeof(body), "00FFWR0%s%s%02X", d.c_str(), a, words);
 
   while (Serial1.available()) Serial1.read();
   rs485TxMode();
@@ -786,12 +794,7 @@ load();
       uint32_t u = 0;
       uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
       bool ok = false;
-      if (g_plcItems[i].dev == "D") {
-        ok = plcReadWords1C(g_plcItems[i].addr, words, u);
-      } else {
-        // X/Y read path is UI-ready; backend acquisition keeps D-only for now.
-        ok = false;
-      }
+      ok = plcReadWords1C(g_plcItems[i].dev, g_plcItems[i].addr, words, u);
       g_plcLastOk[i] = ok;
       g_plcLastU32[i] = u;
       if (i) j += ",";
@@ -1119,7 +1122,7 @@ void maybeWriteCsvLog() {
     // PLC: save currently acquired configured addresses
     f.print(ts);
     for (int i=0;i<5;i++) {
-      f.print(",D"); f.print(g_plcItems[i].addr); f.print("=");
+      f.print(","); f.print(g_plcItems[i].dev); f.print(g_plcItems[i].addr); f.print("=");
       if (g_plcLastOk[i]) f.print(g_plcLastU32[i]); else f.print("NA");
     }
     f.println();
