@@ -388,7 +388,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div class='card' id='plcCard'>
 <h4>PLC Monitor</h4>
 <div id='plcItems'></div>
-<button onclick='savePlc()'>Save PLC Items</button>
+
 </div>
 
 <div class='card' id='plcBottomActions'>
@@ -453,6 +453,7 @@ let timer=null;
 let pollBusy=false;
 let invActive=false;
 let plcActive=false;
+let plcLastHtml='';
 let hzHist=[], vHist=[], aHist=[];
 let lastAlarms=[];
 let expandedAlarm={};
@@ -524,6 +525,8 @@ function openInvPage(){
 }
 
 async function save(){
+  // PLC item settings are saved together via Save & Apply.
+  await savePlc();
   const m = $('mode').value;
   let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invProto:$('invProto').value,invUnit:$('invUnit').value,invDataBits:$('invDataBits').value,invParity:$('invParity').value,invStopBits:$('invStopBits').value});
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
@@ -572,7 +575,11 @@ async function readPlcNow(){
     let r=await fetch('/plcread',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
-    $('plcOut').innerHTML = renderPlcItems(j.items||[]);
+    const html = renderPlcItems(j.items||[]);
+    if (html !== plcLastHtml) {
+      $('plcOut').innerHTML = html;
+      plcLastHtml = html;
+    }
     $('plcStatus').innerHTML = "<div class='card small'>更新: " + new Date().toLocaleTimeString() + "</div>";
   }catch(e){
     $('plcStatus').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
@@ -846,7 +853,7 @@ load();
   });
 
   g_web.on("/plcread", HTTP_GET, []() {
-    applySerialProfile(MODE_PLC_FX5_1C);
+    if (g_mode != MODE_PLC_FX5_1C) applySerialProfile(MODE_PLC_FX5_1C);
 
     // Faster scan: read two items per request (round-robin), return cached snapshot for all.
     uint8_t i = g_plcScanIdx % 5;
