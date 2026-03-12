@@ -288,7 +288,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
 
   while (Serial1.available()) Serial1.read();
   rs485TxMode();
-  delayMicroseconds(20);
+  delay(1);
   Serial1.write(ENQ);
   Serial1.print(body);
   Serial1.write(CR);
