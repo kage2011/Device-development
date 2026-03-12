@@ -186,12 +186,19 @@ void applySerialProfile(ProtoMode mode) {
     Serial.print(g_plcProfile.fmt);
     Serial.println(")");
   } else {
-    Serial1.begin(g_invProfile.baud, toSerialConfig(g_invProfile.fmt), PIN_RX, PIN_TX);
-    Serial.print("profile=inv (");
-    Serial.print(g_invProfile.baud);
-    Serial.print(" ");
-    Serial.print(g_invProfile.fmt);
-    Serial.println(")");
+    // NOTE: Modbus RTU transport config UI exists, but runtime read logic is currently clink path.
+    // To avoid no-response state, keep known-good clink serial profile until modbus read path is implemented.
+    if (g_invProto == "modbus") {
+      Serial1.begin(19200, SERIAL_8E2, PIN_RX, PIN_TX);
+      Serial.println("profile=inv (modbus selected -> temporary clink fallback 19200 8E2)");
+    } else {
+      Serial1.begin(g_invProfile.baud, toSerialConfig(g_invProfile.fmt), PIN_RX, PIN_TX);
+      Serial.print("profile=inv (");
+      Serial.print(g_invProfile.baud);
+      Serial.print(" ");
+      Serial.print(g_invProfile.fmt);
+      Serial.println(")");
+    }
   }
   g_mode = mode;
 }
