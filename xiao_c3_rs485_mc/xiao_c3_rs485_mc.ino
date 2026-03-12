@@ -78,6 +78,8 @@ String g_logPath = "";
 uint32_t g_plcLastU32[5] = {0,0,0,0,0};
 bool g_plcLastOk[5] = {false,false,false,false,false};
 uint8_t g_plcScanIdx = 0;
+uint8_t g_plcMbLastRc = 0xFF;
+String g_plcMbLastOp = "";
 
 void mbPreTx();
 void mbPostTx();
@@ -378,6 +380,7 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
     uint16_t qtyBits = (words >= 2) ? 32 : 16;
     Serial.print("PLCMB TX coil addr="); Serial.print(addr); Serial.print(" qty="); Serial.print(qtyBits); Serial.print(" st="); Serial.println(g_plcStation);
     uint8_t rc = g_mb.readCoils(addr, qtyBits);
+    g_plcMbLastRc = rc; g_plcMbLastOp = "coil";
     if (rc == g_mb.ku8MBSuccess) {
       // ModbusMaster packs response bytes into responseBuffer words
       u32out = 0;
@@ -391,6 +394,7 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
     }
     // fallback: read as holding register words when coil map isn't enabled
     rc = g_mb.readHoldingRegisters(addr, words);
+    g_plcMbLastRc = rc; g_plcMbLastOp = "hold_fallback";
     if (rc != g_mb.ku8MBSuccess) return false;
     uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
     if (words >= 2) {
@@ -404,6 +408,7 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
 
   Serial.print("PLCMB TX hold addr="); Serial.print(addr); Serial.print(" words="); Serial.print(words); Serial.print(" st="); Serial.println(g_plcStation);
   uint8_t rc = g_mb.readHoldingRegisters(addr, words);
+  g_plcMbLastRc = rc; g_plcMbLastOp = "hold";
   if (rc != g_mb.ku8MBSuccess) return false;
   uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
   if (words >= 2) {
@@ -692,7 +697,8 @@ async function readPlcNow(){
     let j=await r.json();
     if(!plcDashInited) renderPlcSkeleton(j.items||[]);
     (j.updated||[]).forEach(applyPlcItemUpdate);
-    const msg = j.note ? ('更新: ' + new Date().toLocaleTimeString() + ' / ' + j.note) : ('更新: ' + new Date().toLocaleTimeString());
+    let msg = j.note ? ('更新: ' + new Date().toLocaleTimeString() + ' / ' + j.note) : ('更新: ' + new Date().toLocaleTimeString());
+    if (j.mbRc !== undefined) msg += ` / mbRc=${j.mbRc}(${j.mbOp||''})`;
     $('plcStatus').innerHTML = "<div class='card small'>" + msg + "</div>";
   }catch(e){
     $('plcStatus').innerHTML = "<div class='card small'>通信再試行中... (Wi-Fi/負荷)</div>";
@@ -1058,7 +1064,7 @@ load();
         + ",\"s32\":" + String((int32_t)cu)
         + "}";
     }
-    j += "]}";
+    j += "],\"mbRc\":" + String(g_plcMbLastRc) + ",\"mbOp\":\"" + g_plcMbLastOp + "\"}";
     g_web.send(200, "application/json", j);
   });
 
