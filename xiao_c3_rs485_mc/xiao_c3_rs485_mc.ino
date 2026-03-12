@@ -978,21 +978,38 @@ bool readInverterOnceClink(const char *cmd2, uint16_t &valueOut) {
 }
 
 bool readInverterOnceModbus(const char *cmd2, uint16_t &valueOut) {
-  uint16_t reg = (uint16_t)strtoul(cmd2, nullptr, 16);
+  // FR-D Modbus register map (manual):
+  // 6F->40201(freq), 70->40202(current), 71->40203(voltage), 79->40009(status), 74..77->40501..40504(alarm hist)
+  uint16_t reg4x = 0;
+  String c = String(cmd2);
+  if (c == "6F") reg4x = 40201;
+  else if (c == "70") reg4x = 40202;
+  else if (c == "71") reg4x = 40203;
+  else if (c == "79") reg4x = 40009;
+  else if (c == "74") reg4x = 40501;
+  else if (c == "75") reg4x = 40502;
+  else if (c == "76") reg4x = 40503;
+  else if (c == "77") reg4x = 40504;
+  else return false;
+
+  // Modbus start address = register number - 40001
+  uint16_t addr = reg4x - 40001;
+
   if (g_invUnit < 1 || g_invUnit > 247) g_invUnit = 1;
   g_mb.begin((uint8_t)g_invUnit, Serial1);
   g_mb.preTransmission(mbPreTx);
   g_mb.postTransmission(mbPostTx);
-  // clear stale bytes
   while (Serial1.available()) Serial1.read();
-  uint8_t rc = g_mb.readHoldingRegisters(reg, 1);
+  uint8_t rc = g_mb.readHoldingRegisters(addr, 1);
   if (rc == g_mb.ku8MBSuccess) {
     valueOut = g_mb.getResponseBuffer(0);
-    Serial.print("MB reg=0x"); Serial.print(reg, HEX);
+    Serial.print("MB reg="); Serial.print(reg4x);
+    Serial.print(" addr="); Serial.print(addr);
     Serial.print(" val=0x"); Serial.println(valueOut, HEX);
     return true;
   }
-  Serial.print("MB NG rc="); Serial.println(rc);
+  Serial.print("MB NG reg="); Serial.print(reg4x);
+  Serial.print(" rc="); Serial.println(rc);
   return false;
 }
 
