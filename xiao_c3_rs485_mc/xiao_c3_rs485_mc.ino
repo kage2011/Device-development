@@ -393,7 +393,7 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <h4>PLC Dashboard</h4>
 <button onclick='backToMain()'>← Back</button>
 <button onclick='readPlcNow()'>Read PLC</button>
-<pre id='plcOut' class='small' style='white-space:pre-wrap'></pre>
+<div id='plcOut' class='small'></div>
 </div>
 
 <div class='card' id='invCard' style='display:none'>
@@ -534,17 +534,37 @@ async function savePlc(){
   await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
+function plcBitGrid16(v){
+  let h = `<div class='grid' style='grid-template-columns:repeat(8,minmax(38px,1fr));'>`;
+  for(let b=15;b>=0;b--){
+    const on = ((v>>>b)&1)===1;
+    h += `<div class='cell ${on?'on':'off'}' style='padding:6px'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
+  }
+  h += `</div>`;
+  return h;
+}
+function renderPlcItems(items){
+  return items.map(it=>{
+    const isBit = String(it.view||'word')==='bit';
+    const head = `<div class='small'>#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}) ${it.ok?'OK':'NG'}</div>`;
+    if(!it.ok) return `<div class='card'>${head}<div class='small'>読取失敗</div></div>`;
+    if(isBit){
+      return `<div class='card'>${head}${plcBitGrid16(Number(it.u32)||0)}</div>`;
+    }
+    return `<div class='card'>${head}<div class='kpi'>u32: ${it.u32}</div><div class='kpi'>s32: ${it.s32}</div></div>`;
+  }).join('');
+}
 async function readPlcNow(){
-  $('plcOut').textContent = '読み取り中...';
+  $('plcOut').innerHTML = "<div class='card small'>読み取り中...</div>";
   try{
     const ac = new AbortController();
     const t = setTimeout(()=>ac.abort(), 5000);
     let r=await fetch('/plcread',{signal:ac.signal});
     clearTimeout(t);
     let j=await r.json();
-    $('plcOut').textContent = j.items.map(it=>`#${it.idx+1} ${it.dev}${it.addr} ok=${it.ok} u32=${it.u32} s32=${it.s32}`).join('\n');
+    $('plcOut').innerHTML = renderPlcItems(j.items||[]);
   }catch(e){
-    $('plcOut').textContent = 'Read PLC失敗: ' + e;
+    $('plcOut').innerHTML = "<div class='card small'>Read PLC失敗: " + e + "</div>";
   }
 }
 
@@ -827,6 +847,8 @@ load();
       j += "{\"idx\":" + String(i)
         + ",\"dev\":\"" + g_plcItems[i].dev + "\""
         + ",\"addr\":" + String(g_plcItems[i].addr)
+        + ",\"view\":\"" + g_plcItems[i].view + "\""
+        + ",\"width\":" + String(g_plcItems[i].width)
         + ",\"ok\":" + String(ok ? "true" : "false")
         + ",\"u32\":" + String(u)
         + ",\"s32\":" + String((int32_t)u)
