@@ -379,7 +379,13 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
     // bit display wants 16/32 bits (derived from words: 1=>16bit, 2=>32bit)
     uint16_t qtyBits = (words >= 2) ? 32 : 16;
     Serial.print("PLCMB TX coil addr="); Serial.print(addr); Serial.print(" qty="); Serial.print(qtyBits); Serial.print(" st="); Serial.println(g_plcStation);
-    uint8_t rc = g_mb.readCoils(addr, qtyBits);
+    uint8_t rc = 0xFF;
+    for (int tr=0; tr<2; tr++) {
+      while (Serial1.available()) Serial1.read();
+      rc = g_mb.readCoils(addr, qtyBits);
+      if (rc == g_mb.ku8MBSuccess) break;
+      delay(2);
+    }
     g_plcMbLastRc = rc; g_plcMbLastOp = "coil";
     if (rc == g_mb.ku8MBSuccess) {
       // ModbusMaster packs response bytes into responseBuffer words
@@ -407,7 +413,13 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
   }
 
   Serial.print("PLCMB TX hold addr="); Serial.print(addr); Serial.print(" words="); Serial.print(words); Serial.print(" st="); Serial.println(g_plcStation);
-  uint8_t rc = g_mb.readHoldingRegisters(addr, words);
+  uint8_t rc = 0xFF;
+  for (int tr=0; tr<2; tr++) {
+    while (Serial1.available()) Serial1.read();
+    rc = g_mb.readHoldingRegisters(addr, words);
+    if (rc == g_mb.ku8MBSuccess) break;
+    delay(2);
+  }
   g_plcMbLastRc = rc; g_plcMbLastOp = "hold";
   if (rc != g_mb.ku8MBSuccess) return false;
   uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
@@ -1181,8 +1193,8 @@ static uint16_t g_h74=0, g_h75=0, g_h76=0, g_h77=0;
 static bool g_h74ok=false, g_h75ok=false, g_h76ok=false, g_h77ok=false;
 static bool g_alarmInitialized=false;
 
-void mbPreTx() { rs485TxMode(); delayMicroseconds(120); }
-void mbPostTx() { Serial1.flush(); delayMicroseconds(120); rs485RxMode(); }
+void mbPreTx() { rs485TxMode(); delay(1); }
+void mbPostTx() { Serial1.flush(); delay(1); rs485RxMode(); }
 
 bool readInverterOnceClink(const char *cmd2, uint16_t &valueOut) {
   const uint8_t ENQ = 0x05;
