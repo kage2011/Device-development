@@ -550,10 +550,11 @@ async function savePlc(){
 
 function plcBitGridById(id,v,width){
   const bits = Number(width||16)===32 ? 32 : 16;
-  let h = `<div class='grid' style='grid-template-columns:repeat(8,minmax(30px,1fr));width:100%;overflow:hidden'>`;
+  const cols = bits===32 ? 4 : 8;
+  let h = `<div class='grid' style='grid-template-columns:repeat(${cols},minmax(0,1fr));width:100%;overflow:hidden'>`;
   for(let b=bits-1;b>=0;b--){
     const on = (((v>>>0)>>>b)&1)===1;
-    h += `<div id='bit_${id}_${b}' class='cell ${on?'on':'off'}' style='padding:5px;min-width:0'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
+    h += `<div id='bit_${id}_${b}' class='cell ${on?'on':'off'}' style='padding:4px;min-width:0'><span class='n' style='font-size:10px'>b${b}</span><span class='v' style='font-size:12px'>${on?'1':'0'}</span></div>`;
   }
   h += `</div>`;
   return h;
