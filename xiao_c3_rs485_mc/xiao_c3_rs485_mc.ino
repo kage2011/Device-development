@@ -705,7 +705,7 @@ function startPolling(){
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; }
-  }, 80);
+  }, 1);
 }
 
 $('mode').addEventListener('change',()=>{ if($('mode').value==='inv') plcActive=false; updateModePanels(); startPolling(); });
