@@ -374,16 +374,31 @@ bool plcReadModbus(const String &dev, uint16_t addr, uint8_t words, const String
 
   String d = dev; d.toUpperCase();
   if (view == "bit") {
-    Serial.print("PLCMB TX coil addr="); Serial.print(addr); Serial.print(" st="); Serial.println(g_plcStation);
-    uint8_t rc = g_mb.readCoils(addr, 1);
-    if (rc != g_mb.ku8MBSuccess) {
-      // fallback: some maps expose bits as holding regs
-      rc = g_mb.readHoldingRegisters(addr, 1);
-      if (rc != g_mb.ku8MBSuccess) return false;
-      u32out = (uint16_t)g_mb.getResponseBuffer(0);
+    // bit display wants 16/32 bits (derived from words: 1=>16bit, 2=>32bit)
+    uint16_t qtyBits = (words >= 2) ? 32 : 16;
+    Serial.print("PLCMB TX coil addr="); Serial.print(addr); Serial.print(" qty="); Serial.print(qtyBits); Serial.print(" st="); Serial.println(g_plcStation);
+    uint8_t rc = g_mb.readCoils(addr, qtyBits);
+    if (rc == g_mb.ku8MBSuccess) {
+      // ModbusMaster packs response bytes into responseBuffer words
+      u32out = 0;
+      for (uint16_t b = 0; b < qtyBits; b++) {
+        uint16_t wi = b / 16;
+        uint8_t  bi = b % 16;
+        uint16_t w = g_mb.getResponseBuffer(wi);
+        if ((w >> bi) & 0x1) u32out |= (1UL << b);
+      }
       return true;
     }
-    u32out = (g_mb.getResponseBuffer(0) & 0x01) ? 1 : 0;
+    // fallback: read as holding register words when coil map isn't enabled
+    rc = g_mb.readHoldingRegisters(addr, words);
+    if (rc != g_mb.ku8MBSuccess) return false;
+    uint16_t w1 = (uint16_t)g_mb.getResponseBuffer(0);
+    if (words >= 2) {
+      uint16_t w2 = (uint16_t)g_mb.getResponseBuffer(1);
+      u32out = ((uint32_t)w2 << 16) | w1;
+    } else {
+      u32out = w1;
+    }
     return true;
   }
 
