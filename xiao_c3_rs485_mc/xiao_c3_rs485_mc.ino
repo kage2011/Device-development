@@ -72,6 +72,7 @@ LogConfig g_logCfg = {false, 1000, "", "inv", 0};
 String g_logPath = "";
 uint32_t g_plcLastU32[5] = {0,0,0,0,0};
 bool g_plcLastOk[5] = {false,false,false,false,false};
+uint8_t g_plcScanIdx = 0;
 
 void saveRuntimeConfig() {
   File f = SPIFFS.open("/runtime_cfg.txt", FILE_WRITE);
@@ -296,7 +297,7 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
 
   uint8_t raw[96]; size_t n = 0;
   unsigned long t0 = millis();
-  while (millis() - t0 < 300 && n < sizeof(raw)) {
+  while (millis() - t0 < 120 && n < sizeof(raw)) {
     if (Serial1.available()) raw[n++] = (uint8_t)Serial1.read();
   }
 
@@ -697,7 +698,7 @@ function startPolling(){
       else if(invActive) await readInvNow();
     }catch(e){}
     finally{ pollBusy = false; }
-  }, 100);
+  }, 80);
 }
 
 $('mode').addEventListener('change',()=>{ if($('mode').value==='inv') plcActive=false; updateModePanels(); startPolling(); });
@@ -837,23 +838,29 @@ load();
 
   g_web.on("/plcread", HTTP_GET, []() {
     applySerialProfile(MODE_PLC_FX5_1C);
-    String j = "{\"items\":[";
-    for (int i = 0; i < 5; i++) {
-      uint32_t u = 0;
-      uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
-      bool ok = false;
-      ok = plcReadWords1C(g_plcItems[i].dev, g_plcItems[i].addr, words, u);
-      g_plcLastOk[i] = ok;
-      g_plcLastU32[i] = u;
-      if (i) j += ",";
-      j += "{\"idx\":" + String(i)
-        + ",\"dev\":\"" + g_plcItems[i].dev + "\""
-        + ",\"addr\":" + String(g_plcItems[i].addr)
-        + ",\"view\":\"" + g_plcItems[i].view + "\""
-        + ",\"width\":" + String(g_plcItems[i].width)
-        + ",\"ok\":" + String(ok ? "true" : "false")
-        + ",\"u32\":" + String(u)
-        + ",\"s32\":" + String((int32_t)u)
+
+    // Fast scan: read one item per request (round-robin), return cached snapshot for all.
+    uint8_t i = g_plcScanIdx % 5;
+    uint32_t u = 0;
+    uint8_t words = (g_plcItems[i].width == 32) ? 2 : 1;
+    bool ok = plcReadWords1C(g_plcItems[i].dev, g_plcItems[i].addr, words, u);
+    g_plcLastOk[i] = ok;
+    if (ok) g_plcLastU32[i] = u;
+    g_plcScanIdx = (g_plcScanIdx + 1) % 5;
+
+    String j = "{\"scanIdx\":" + String(i) + ",\"items\":[";
+    for (int k = 0; k < 5; k++) {
+      if (k) j += ",";
+      uint32_t cu = g_plcLastU32[k];
+      bool cok = g_plcLastOk[k];
+      j += "{\"idx\":" + String(k)
+        + ",\"dev\":\"" + g_plcItems[k].dev + "\""
+        + ",\"addr\":" + String(g_plcItems[k].addr)
+        + ",\"view\":\"" + g_plcItems[k].view + "\""
+        + ",\"width\":" + String(g_plcItems[k].width)
+        + ",\"ok\":" + String(cok ? "true" : "false")
+        + ",\"u32\":" + String(cu)
+        + ",\"s32\":" + String((int32_t)cu)
         + "}";
     }
     j += "]}";
