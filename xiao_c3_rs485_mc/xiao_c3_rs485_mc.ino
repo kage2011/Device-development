@@ -31,6 +31,10 @@ struct SerialProfile {
 };
 
 SerialProfile g_plcProfile = {9600, "7O1"};
+uint16_t g_plcStation = 0;
+uint8_t g_plcDataBits = 7;
+char g_plcParity = 'O'; // N/E/O
+uint8_t g_plcStopBits = 1;
 SerialProfile g_invProfile = {19200, "8E2"};
 String g_invProto = "clink"; // clink | modbus
 uint16_t g_invUnit = 0;
@@ -83,6 +87,10 @@ void saveRuntimeConfig() {
   f.println(String("mode=") + (g_mode == MODE_INV_FRD820 ? "inv" : "plc"));
   f.println(String("plcBaud=") + g_plcProfile.baud);
   f.println(String("plcFmt=") + g_plcProfile.fmt);
+  f.println(String("plcStation=") + g_plcStation);
+  f.println(String("plcDataBits=") + g_plcDataBits);
+  f.println(String("plcParity=") + String(g_plcParity));
+  f.println(String("plcStopBits=") + g_plcStopBits);
   f.println(String("invBaud=") + g_invProfile.baud);
   f.println(String("invFmt=") + g_invProfile.fmt);
   f.println(String("invProto=") + g_invProto);
@@ -124,6 +132,10 @@ void loadRuntimeConfig() {
     if (k == "mode") g_mode = (v == "inv") ? MODE_INV_FRD820 : MODE_PLC_FX5_1C;
     else if (k == "plcBaud") g_plcProfile.baud = v.toInt();
     else if (k == "plcFmt") g_plcProfile.fmt = v;
+    else if (k == "plcStation") g_plcStation = (uint16_t)v.toInt();
+    else if (k == "plcDataBits") g_plcDataBits = (uint8_t)v.toInt();
+    else if (k == "plcParity") g_plcParity = v.length() ? v[0] : 'N';
+    else if (k == "plcStopBits") g_plcStopBits = (uint8_t)v.toInt();
     else if (k == "invBaud") g_invProfile.baud = v.toInt();
     else if (k == "invFmt") g_invProfile.fmt = v;
     else if (k == "invProto") g_invProto = v;
@@ -202,12 +214,15 @@ void ensureLogFile() {
 void applySerialProfile(ProtoMode mode) {
   Serial1.end();
   if (mode == MODE_PLC_FX5_1C) {
-    Serial1.begin(g_plcProfile.baud, toSerialConfig(g_plcProfile.fmt), PIN_RX, PIN_TX);
+    String plcFmt = makeInvFmt(g_plcDataBits, g_plcParity, g_plcStopBits);
+    Serial1.begin(g_plcProfile.baud, toSerialConfig(plcFmt), PIN_RX, PIN_TX);
     Serial.print("profile=plc (");
     Serial.print(g_plcProfile.baud);
     Serial.print(" ");
-    Serial.print(g_plcProfile.fmt);
+    Serial.print(plcFmt);
+    Serial.print(" st="); Serial.print(g_plcStation);
     Serial.println(")");
+    g_plcProfile.fmt = plcFmt;
   } else {
     // NOTE: runtime read path is currently clink logic; modbus selection keeps transport configurable.
     String invFmt = makeInvFmt(g_invDataBits, g_invParity, g_invStopBits);
@@ -284,7 +299,8 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
   else snprintf(a, sizeof(a), "%04u", addr);
 
   char body[40];
-  snprintf(body, sizeof(body), "00FFWR0%s%s%02X", d.c_str(), a, words);
+  uint8_t st = (uint8_t)(g_plcStation & 0xFF);
+  snprintf(body, sizeof(body), "%02XFFWR0%s%s%02X", st, d.c_str(), a, words);
 
   while (Serial1.available()) Serial1.read();
   rs485TxMode();
@@ -309,8 +325,8 @@ bool plcReadWords1C(const String &dev, uint16_t addr, uint8_t words, uint32_t &u
     if (c == 0x0D) break;                      // CR terminator
   }
 
-  if (n >= 10 && raw[0] == 0x02 && raw[1] == '0' && raw[2] == '0' && raw[3] == 'F' && raw[4] == 'F') {
-    // STX 00FF [data...] ETX
+  if (n >= 10 && raw[0] == 0x02 && raw[3] == 'F' && raw[4] == 'F') {
+    // STX ssFF [data...] ETX
     int etx = -1;
     for (size_t i = 5; i < n; i++) if (raw[i] == 0x03) { etx = (int)i; break; }
     if (etx > 8) {
@@ -368,8 +384,11 @@ canvas{width:100%;max-width:100%;background:#fff;border:1px solid #d7dbea;border
 <div class='card'>
 <label>Mode<select id='mode'><option value='plc'>PLC</option><option value='inv'>INV</option></select></label>
 <div id='plcCfg'>
+<label>PLC 局番<input id='plcStation' type='number' min='0' max='255' value='0'></label>
 <label>PLC Baud<select id='plcBaud'><option>1200</option><option>2400</option><option>4800</option><option selected>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></label>
-<label>PLC Format<select id='plcFmt'><option>7O1</option><option>7E1</option><option>8N1</option><option>8E1</option><option>8O1</option><option>8E2</option></select></label>
+<label>データ長<select id='plcDataBits'><option value='7' selected>7</option><option value='8'>8</option></select></label>
+<label>パリティ<select id='plcParity'><option value='N'>None</option><option value='E'>Even</option><option value='O' selected>Odd</option></select></label>
+<label>ストップビット<select id='plcStopBits'><option value='1' selected>1</option><option value='2'>2</option></select></label>
 </div>
 <div id='invCfg'>
 <label>通信方式<select id='invProto' onchange='updateInvParamView()'><option value='clink'>計算機リンク</option><option value='modbus'>Modbus RTU</option></select></label>
@@ -504,7 +523,7 @@ function backToMain(){
 
 async function load(){
   let r=await fetch('/cfg');let j=await r.json();
-  $('mode').value=j.mode; $('plcBaud').value=String(j.plcBaud); $('plcFmt').value=j.plcFmt; $('invBaud').value=String(j.invBaud);
+  $('mode').value=j.mode; $('plcBaud').value=String(j.plcBaud); $('plcStation').value=String(j.plcStation||0); $('plcDataBits').value=String(j.plcDataBits||7); $('plcParity').value=String(j.plcParity||'O'); $('plcStopBits').value=String(j.plcStopBits||1); $('invBaud').value=String(j.invBaud);
   $('invProto').value=j.invProto || 'clink';
   $('invUnit').value=String((j.invUnit ?? 0));
   $('invDataBits').value=String(j.invDataBits || 8);
@@ -530,7 +549,7 @@ async function save(){
   // PLC item settings are saved together via Save & Apply.
   await savePlc();
   const m = $('mode').value;
-  let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcFmt:$('plcFmt').value,invBaud:$('invBaud').value,invProto:$('invProto').value,invUnit:$('invUnit').value,invDataBits:$('invDataBits').value,invParity:$('invParity').value,invStopBits:$('invStopBits').value});
+  let p=new URLSearchParams({mode:m,plcBaud:$('plcBaud').value,plcStation:$('plcStation').value,plcDataBits:$('plcDataBits').value,plcParity:$('plcParity').value,plcStopBits:$('plcStopBits').value,invBaud:$('invBaud').value,invProto:$('invProto').value,invUnit:$('invUnit').value,invDataBits:$('invDataBits').value,invParity:$('invParity').value,invStopBits:$('invStopBits').value});
   await fetch('/set',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
   updateModePanels();
   alert('保存されました');
@@ -750,6 +769,10 @@ load();
     j += "\"mode\":\"" + String(g_mode == MODE_PLC_FX5_1C ? "plc" : "inv") + "\",";
     j += "\"plcBaud\":" + String(g_plcProfile.baud) + ",";
     j += "\"plcFmt\":\"" + g_plcProfile.fmt + "\",";
+    j += "\"plcStation\":" + String(g_plcStation) + ",";
+    j += "\"plcDataBits\":" + String(g_plcDataBits) + ",";
+    j += "\"plcParity\":\"" + String(g_plcParity) + "\",";
+    j += "\"plcStopBits\":" + String(g_plcStopBits) + ",";
     j += "\"invBaud\":" + String(g_invProfile.baud) + ",";
     j += "\"invFmt\":\"" + g_invProfile.fmt + "\",";
     j += "\"invProto\":\"" + g_invProto + "\",";
@@ -775,7 +798,15 @@ load();
 
   g_web.on("/set", HTTP_POST, []() {
     if (g_web.hasArg("plcBaud")) g_plcProfile.baud = g_web.arg("plcBaud").toInt();
-    if (g_web.hasArg("plcFmt")) g_plcProfile.fmt = g_web.arg("plcFmt");
+    if (g_web.hasArg("plcStation")) {
+      int st = g_web.arg("plcStation").toInt();
+      if (st < 0) st = 0; if (st > 255) st = 255;
+      g_plcStation = (uint16_t)st;
+    }
+    if (g_web.hasArg("plcDataBits")) g_plcDataBits = (uint8_t)g_web.arg("plcDataBits").toInt();
+    if (g_web.hasArg("plcParity")) { String pv = g_web.arg("plcParity"); g_plcParity = pv.length()?pv[0]:'N'; }
+    if (g_web.hasArg("plcStopBits")) g_plcStopBits = (uint8_t)g_web.arg("plcStopBits").toInt();
+    g_plcProfile.fmt = makeInvFmt(g_plcDataBits, g_plcParity, g_plcStopBits);
     if (g_web.hasArg("invBaud")) g_invProfile.baud = g_web.arg("invBaud").toInt();
     if (g_web.hasArg("invProto")) g_invProto = g_web.arg("invProto");
     if (g_web.hasArg("invDataBits")) g_invDataBits = (uint8_t)g_web.arg("invDataBits").toInt();
