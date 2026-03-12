@@ -548,11 +548,12 @@ async function savePlc(){
   await fetch('/plcset',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p});
 }
 
-function plcBitGrid16ById(id,v){
-  let h = `<div class='grid' style='grid-template-columns:repeat(8,minmax(38px,1fr));'>`;
-  for(let b=15;b>=0;b--){
-    const on = ((v>>>b)&1)===1;
-    h += `<div id='bit_${id}_${b}' class='cell ${on?'on':'off'}' style='padding:6px'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
+function plcBitGridById(id,v,width){
+  const bits = Number(width||16)===32 ? 32 : 16;
+  let h = `<div class='grid' style='grid-template-columns:repeat(8,minmax(30px,1fr));width:100%;overflow:hidden'>`;
+  for(let b=bits-1;b>=0;b--){
+    const on = (((v>>>0)>>>b)&1)===1;
+    h += `<div id='bit_${id}_${b}' class='cell ${on?'on':'off'}' style='padding:5px;min-width:0'><span class='n'>b${b}</span><span class='v'>${on?'1':'0'}</span></div>`;
   }
   h += `</div>`;
   return h;
@@ -563,7 +564,7 @@ function renderPlcSkeleton(items){
     const signLabel = it.sign ? 'sign' : 'unsign';
     const head = `#${it.idx+1} ${it.dev}${it.addr} (${it.view}/${it.width}/${signLabel}) --`;
     if(isBit){
-      return `<div class='card'><div id='head_${it.idx}' class='small'>${head}</div>${plcBitGrid16ById(it.idx,0)}</div>`;
+      return `<div class='card'><div id='head_${it.idx}' class='small'>${head}</div>${plcBitGridById(it.idx,0,it.width)}</div>`;
     }
     return `<div class='card'><div id='head_${it.idx}' class='small'>${head}</div><div id='val_${it.idx}' class='kpi'>-</div></div>`;
   }).join('');
@@ -577,7 +578,8 @@ function applyPlcItemUpdate(it){
   if(!it.ok) return;
   if(isBit){
     const v = Number(it.u32)||0;
-    for(let b=15;b>=0;b--){
+    const bits = Number(it.width||16)===32 ? 32 : 16;
+    for(let b=bits-1;b>=0;b--){
       const el = document.getElementById(`bit_${it.idx}_${b}`);
       if(!el) continue;
       const on = ((v>>>b)&1)===1;
